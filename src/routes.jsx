@@ -2,37 +2,37 @@ import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import AppLayout from './layout/AppLayout';
 import ProtectedRoute from './routes/ProtectedRoute';
+import RequireSuperAdmin from './routes/RequireSuperAdmin';
 import Login from './pages/Login';
 import { Loader } from './components/ui/Feedback';
 
-const DashboardPage = lazy(() => import('./features/dashboard/DashboardPage'));
-const VentesCaissePage = lazy(() => import('./features/ventes-caisse/VentesCaissePage'));
+const TableauDeBordPage = lazy(() => import('./features/tableau-de-bord/TableauDeBordPage'));
+const UtilisateursPage = lazy(() => import('./features/utilisateurs/UtilisateursPage'));
+const JournalOperationsPage = lazy(() => import('./features/journal-operations/JournalOperationsPage'));
+const ProduitsPage = lazy(() => import('./features/produits/ProduitsPage'));
+const TablesPage = lazy(() => import('./features/tables/TablesPage'));
+const CommandesPage = lazy(() => import('./features/commandes/CommandesPage'));
 const FacturesPage = lazy(() => import('./features/factures/FacturesPage'));
-const CaissesPage = lazy(() => import('./features/caisses/CaissesPage'));
+const SuiviCuisinePage = lazy(() => import('./features/suivi-cuisine/SuiviCuisinePage'));
 const RemisesPage = lazy(() => import('./features/remises/RemisesPage'));
 const AvoirsPage = lazy(() => import('./features/avoirs/AvoirsPage'));
-const TablesPage = lazy(() => import('./features/tables/TablesPage'));
-const CommandesRestaurantPage = lazy(() => import('./features/commandes-restaurant/CommandesRestaurantPage'));
-const SuiviCuisinePage = lazy(() => import('./features/suivi-cuisine/SuiviCuisinePage'));
-const MenusTarifsPage = lazy(() => import('./features/menus-tarifs/MenusTarifsPage'));
-const CaveAVinPage = lazy(() => import('./features/cave-a-vin/CaveAVinPage'));
-const MaquisPage = lazy(() => import('./features/maquis/MaquisPage'));
-const StocksInventairePage = lazy(() => import('./features/stocks-inventaire/StocksInventairePage'));
-const EntreesStockPage = lazy(() => import('./features/entrees-stock/EntreesStockPage'));
-const SortiesStockPage = lazy(() => import('./features/sorties-stock/SortiesStockPage'));
-const FinancierPage = lazy(() => import('./features/financier/FinancierPage'));
+const FournisseursPage = lazy(() => import('./features/fournisseurs/FournisseursPage'));
+const MouvementsStockPage = lazy(() => import('./features/stocks/MouvementsStockPage'));
+const TransfertsPage = lazy(() => import('./features/stocks/TransfertsPage'));
+const InventairesPage = lazy(() => import('./features/inventaires/InventairesPage'));
+const InventaireDetailPage = lazy(() => import('./features/inventaires/InventaireDetailPage'));
 const DepensesPage = lazy(() => import('./features/depenses/DepensesPage'));
-const UtilisateursPage = lazy(() => import('./features/utilisateurs/UtilisateursPage'));
-const ProfilsDroitsPage = lazy(() => import('./features/profils-droits/ProfilsDroitsPage'));
-const JournalOperationsPage = lazy(() => import('./features/journal-operations/JournalOperationsPage'));
-const ReportingDashboardPage = lazy(() => import('./features/reporting/ReportingDashboardPage'));
+const CategoriesDepensesPage = lazy(() => import('./features/depenses/CategoriesDepensesPage'));
+const GestionFinancierePage = lazy(() => import('./features/financier/GestionFinancierePage'));
+const DashboardReportingPage = lazy(() => import('./features/reporting/DashboardReportingPage'));
 const RapportVentesPage = lazy(() => import('./features/reporting/RapportVentesPage'));
-const RapportStocksPage = lazy(() => import('./features/reporting/RapportStocksPage'));
 const RapportRecettesPage = lazy(() => import('./features/reporting/RapportRecettesPage'));
+const RapportStocksPage = lazy(() => import('./features/reporting/RapportStocksPage'));
 const RapportBeneficesPage = lazy(() => import('./features/reporting/RapportBeneficesPage'));
 const ParametresPage = lazy(() => import('./features/parametres/ParametresPage'));
-const SauvegardePage = lazy(() => import('./features/sauvegarde/SauvegardePage'));
+const SauvegardesPage = lazy(() => import('./features/sauvegardes/SauvegardesPage'));
 const AidePage = lazy(() => import('./features/aide/AidePage'));
+const AccessDeniedPage = lazy(() => import('./pages/AccessDeniedPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
 function withSuspense(element) {
@@ -49,37 +49,36 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     ),
     children: [
-      { index: true, element: <Navigate to="/dashboard" replace /> },
-      { path: 'dashboard', element: withSuspense(<DashboardPage />) },
-      { path: 'ventes', element: withSuspense(<VentesCaissePage />) },
+      { index: true, element: withSuspense(<TableauDeBordPage />) },
+      { path: 'tableau-de-bord', element: withSuspense(<TableauDeBordPage />) },
+      { path: 'reporting/dashboard', element: withSuspense(<DashboardReportingPage />) },
+      { path: 'reporting/ventes', element: withSuspense(<RapportVentesPage />) },
+      { path: 'reporting/recettes', element: withSuspense(<RapportRecettesPage />) },
+      { path: 'reporting/stocks', element: withSuspense(<RapportStocksPage />) },
+      { path: 'reporting/benefices', element: withSuspense(<RapportBeneficesPage />) },
+      { path: 'commandes', element: withSuspense(<CommandesPage />) },
       { path: 'factures', element: withSuspense(<FacturesPage />) },
-      { path: 'caisses', element: withSuspense(<CaissesPage />) },
+      { path: 'suivi-cuisine', element: withSuspense(<SuiviCuisinePage />) },
       { path: 'remises', element: withSuspense(<RemisesPage />) },
       { path: 'avoirs', element: withSuspense(<AvoirsPage />) },
+      { path: 'produits', element: withSuspense(<ProduitsPage />) },
+      { path: 'fournisseurs', element: withSuspense(<FournisseursPage />) },
+      { path: 'mouvements-stock', element: withSuspense(<MouvementsStockPage />) },
+      { path: 'inventaires', element: withSuspense(<InventairesPage />) },
+      { path: 'inventaires/:id', element: withSuspense(<InventaireDetailPage />) },
+      { path: 'transferts', element: withSuspense(<RequireSuperAdmin><TransfertsPage /></RequireSuperAdmin>) },
       { path: 'tables', element: withSuspense(<TablesPage />) },
-      { path: 'commandes-restaurant', element: withSuspense(<CommandesRestaurantPage />) },
-      { path: 'suivi-cuisine', element: withSuspense(<SuiviCuisinePage />) },
-      { path: 'menus-tarifs', element: withSuspense(<MenusTarifsPage />) },
-      { path: 'cave-a-vin', element: withSuspense(<CaveAVinPage />) },
-      { path: 'maquis', element: withSuspense(<MaquisPage />) },
-      { path: 'stocks-inventaire', element: withSuspense(<StocksInventairePage />) },
-      { path: 'entrees-stock', element: withSuspense(<EntreesStockPage />) },
-      { path: 'sorties-stock', element: withSuspense(<SortiesStockPage />) },
-      { path: 'financier', element: withSuspense(<FinancierPage />) },
       { path: 'depenses', element: withSuspense(<DepensesPage />) },
-      { path: 'utilisateurs', element: withSuspense(<UtilisateursPage />) },
-      { path: 'profils-droits', element: withSuspense(<ProfilsDroitsPage />) },
+      { path: 'categories-depenses', element: withSuspense(<RequireSuperAdmin><CategoriesDepensesPage /></RequireSuperAdmin>) },
+      { path: 'gestion-financiere', element: withSuspense(<RequireSuperAdmin><GestionFinancierePage /></RequireSuperAdmin>) },
+      { path: 'utilisateurs', element: withSuspense(<RequireSuperAdmin><UtilisateursPage /></RequireSuperAdmin>) },
       { path: 'journal-operations', element: withSuspense(<JournalOperationsPage />) },
-      { path: 'reporting', element: withSuspense(<ReportingDashboardPage />) },
-      { path: 'reporting/ventes', element: withSuspense(<RapportVentesPage />) },
-      { path: 'reporting/stocks', element: withSuspense(<RapportStocksPage />) },
-      { path: 'reporting/recettes', element: withSuspense(<RapportRecettesPage />) },
-      { path: 'reporting/benefices', element: withSuspense(<RapportBeneficesPage />) },
-      { path: 'parametres', element: withSuspense(<ParametresPage />) },
-      { path: 'sauvegarde', element: withSuspense(<SauvegardePage />) },
+      { path: 'parametres', element: withSuspense(<RequireSuperAdmin><ParametresPage /></RequireSuperAdmin>) },
+      { path: 'sauvegardes', element: withSuspense(<RequireSuperAdmin><SauvegardesPage /></RequireSuperAdmin>) },
       { path: 'aide', element: withSuspense(<AidePage />) },
+      { path: 'acces-refuse', element: withSuspense(<AccessDeniedPage />) },
       { path: '*', element: withSuspense(<NotFoundPage />) },
     ],
   },
-  { path: '*', element: <Navigate to="/dashboard" replace /> },
+  { path: '*', element: <Navigate to="/" replace /> },
 ]);

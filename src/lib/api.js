@@ -68,6 +68,30 @@ export async function fetchPage(url, params = {}) {
   };
 }
 
+// Opens a PDF/file served behind JWT auth (ticket.pdf, avoir.pdf) in a new tab. A plain
+// `window.open(url)` navigates the browser directly to the URL with no Authorization header —
+// the axios interceptor that attaches the bearer token never runs — so protected file endpoints
+// always 401. Fetching the file through `api` (auth header included) as a blob and pointing the
+// tab at that instead works around it. The tab is opened synchronously, before the await, and
+// redirected once the blob is ready: opening it only after the fetch resolves gets blocked by
+// most browsers' popup blockers since it's no longer seen as a direct result of the click.
+export async function openAuthenticatedFile(path) {
+  const newTab = window.open('', '_blank');
+  try {
+    const response = await api.get(path, { responseType: 'blob' });
+    const blobUrl = window.URL.createObjectURL(response.data);
+    if (newTab) {
+      newTab.location.href = blobUrl;
+    } else {
+      window.open(blobUrl, '_blank');
+    }
+    setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
+  } catch (e) {
+    newTab?.close();
+    throw e;
+  }
+}
+
 // Turns a relative path returned by the backend for an uploaded file (e.g. "/uploads/logos/xxx.png",
 // served by Spring itself, not by the Vite dev server) into an absolute URL pointing at the API host.
 // Without this, an <img src> or <a href> built directly from that path resolves against the

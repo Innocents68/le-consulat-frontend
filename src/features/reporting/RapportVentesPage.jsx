@@ -1,70 +1,113 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { TrendingUp, ShoppingBag, Wallet, Percent } from 'lucide-react';
+import { Download, FileSpreadsheet } from 'lucide-react';
 import api, { apiErrorMessage } from '../../lib/api';
+import { downloadExport } from '../../lib/download';
+import DataTable from '../../components/ui/DataTable';
 import PageHeader from '../../components/ui/PageHeader';
-import StatCard from '../../components/ui/StatCard';
-import PeriodFilter from '../../components/ui/PeriodFilter';
-import ExportButtons from '../../components/ui/ExportButtons';
-import { SimpleBarChart } from '../../components/ui/Charts';
-import { Loader, ErrorState } from '../../components/ui/Feedback';
-import { formatFCFA, formatNumber, todayISO, daysAgoISO } from '../../lib/format';
+import { Select } from '../../components/ui/Field';
+import { useTableState } from '../../hooks/useTableState';
+import { useListQuery } from '../../hooks/useResource';
+import { formatDate, formatFCFA } from '../../lib/format';
+import { useToast } from '../../components/ui/Toast';
+import { useAuthStore } from '../../store/authStore';
+import { isSuperAdmin } from '../../lib/perimetre';
 
+const MODES = [
+  { value: 'ESPECES', label: 'Espèces' },
+  { value: 'MOBILE_MONEY', label: 'Mobile Money' },
+  { value: 'CARTE', label: 'Carte bancaire' },
+  { value: 'VIREMENT', label: 'Virement' },
+  { value: 'AUTRE', label: 'Autre' },
+];
+
+/** §6.9.3 : ventes détaillées par produit, catégorie, table, utilisateur, jour et heure. */
 export default function RapportVentesPage() {
-  const [periode, setPeriode] = useState('mois');
-  const [dateDebut, setDateDebut] = useState(daysAgoISO(30));
-  const [dateFin, setDateFin] = useState(todayISO());
+  const toast = useToast();
+  const user = useAuthStore((s) => s.user);
+  const superAdmin = isSuperAdmin(user);
 
-  const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['reporting-ventes', periode, dateDebut, dateFin],
-    queryFn: async () => (await api.get('/reporting/ventes', { params: { periode, dateDebut, dateFin } })).data,
-    retry: 1,
+  const table = useTableState({ initialSize: 15, extraFilters: { etablissementId: '', categorieId: '', produitId: '', utilisateurId: '', modePaiement: '', dateDebut: '', dateFin: '' } });
+  const { data, isLoading, isError, error, refetch } = useListQuery('reporting/ventes', table.params);
+  const { data: etablissements } = useQuery({ queryKey: ['etablissements'], queryFn: async () => (await api.get('/etablissements')).data });
+  const { data: categories } = useQuery({
+    queryKey: ['categories', table.filters.etablissementId],
+    queryFn: async () => (await api.get('/categories', { params: table.filters.etablissementId ? { etablissementId: table.filters.etablissementId } : {} })).data,
+    enabled: superAdmin ? !!table.filters.etablissementId : true,
   });
+
+  const { data: resume } = useQuery({
+    queryKey: ['reporting-ventes-resume', table.params],
+    queryFn: async () => (await api.get('/reporting/ventes/resume', { params: table.params })).data,
+  });
+
+  async function exporter(format) {
+    try {
+      await downloadExport('/reporting/ventes/export', { ...table.params, format }, `rapport-ventes.${format === 'excel' ? 'xlsx' : 'pdf'}`);
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
 
   return (
     <div>
       <PageHeader
         title="Rapport des ventes"
-        subtitle="Chiffre d'affaires, quantités et panier moyen."
-        actions={<ExportButtons endpoint="/reporting/ventes" filenamePrefix="rapport-ventes" />}
+        subtitle="Ventes détaillées par produit, catégorie, table, utilisateur, jour et heure (§6.9.3)."
+        actions={<>
+          <button className="btn-secondary" onClick={() => exporter('pdf')}><Download size={15} /> PDF</button>
+          <button className="btn-secondary" onClick={() => exporter('excel')}><FileSpreadsheet size={15} /> Excel</button>
+        </>}
       />
 
-      <div className="mb-5"><PeriodFilter periode={periode} onPeriodeChange={setPeriode} dateDebut={dateDebut} dateFin={dateFin} onDateDebutChange={setDateDebut} onDateFinChange={setDateFin} /></div>
-
-      {isLoading && <Loader />}
-      {isError && <ErrorState message={apiErrorMessage(error, 'Impossible de charger le rapport des ventes.')} onRetry={refetch} />}
-
-      {!isLoading && !isError && data && (
-        <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <StatCard icon={Wallet} label="Chiffre d'affaires" value={formatFCFA(data.ca ?? data.chiffreAffaires)} />
-            <StatCard icon={ShoppingBag} label="Quantités vendues" value={formatNumber(data.quantiteVendue ?? data.quantites)} />
-            <StatCard icon={Percent} label="Panier moyen" value={formatFCFA(data.panierMoyen)} />
-            <StatCard icon={TrendingUp} label="Total ventes" value={formatNumber(data.nombreVentes ?? data.ventesParJour?.length)} />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="card p-5 lg:col-span-2">
-              <h3 className="section-title mb-3">Ventes par jour</h3>
-              {(data.ventesParJour?.length ?? 0) > 0 ? (
-                <SimpleBarChart data={data.ventesParJour.map((d) => ({ label: d.date?.slice(5), value: d.montant }))} />
-              ) : <p className="text-sm text-ink-light py-10 text-center">Pas de données sur la période.</p>}
-            </div>
-            <div className="card p-5">
-              <h3 className="section-title mb-3">Top produits vendus</h3>
-              <div className="flex flex-col gap-3">
-                {(data.topProduits || []).length === 0 && <p className="text-sm text-ink-light py-6 text-center">Aucune vente.</p>}
-                {(data.topProduits || []).map((p, i) => (
-                  <div key={p.nom} className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-2 truncate"><span className="text-xs font-bold text-ink-light/60">{i + 1}</span>{p.nom}</span>
-                    <span className="font-semibold shrink-0">{formatFCFA(p.montant)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </>
+      {resume && (
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="card p-4"><p className="text-xs text-ink-light uppercase font-semibold">Quantité totale</p><p className="text-xl font-bold">{resume.totalQuantite}</p></div>
+          <div className="card p-4"><p className="text-xs text-ink-light uppercase font-semibold">Montant total</p><p className="text-xl font-bold">{formatFCFA(resume.totalMontant)}</p></div>
+          <div className="card p-4"><p className="text-xs text-ink-light uppercase font-semibold">Panier moyen</p><p className="text-xl font-bold">{formatFCFA(resume.panierMoyen)}</p></div>
+        </div>
       )}
+
+      <DataTable
+        columns={[
+          { key: 'date', header: 'Date', render: (r) => formatDate(r.date) },
+          { key: 'heure', header: 'Heure', render: (r) => r.heure?.slice(0, 5) },
+          { key: 'produitNom', header: 'Produit' },
+          { key: 'categorieNom', header: 'Catégorie' },
+          { key: 'tableNumero', header: 'Table', render: (r) => r.tableNumero || 'À emporter' },
+          { key: 'utilisateurNom', header: 'Utilisateur' },
+          { key: 'quantite', header: 'Quantité' },
+          { key: 'montant', header: 'Montant', render: (r) => formatFCFA(r.montant) },
+        ]}
+        rows={data?.rows || []}
+        total={data?.total || 0}
+        totalPages={data?.totalPages || 0}
+        page={table.page}
+        isLoading={isLoading}
+        isError={isError}
+        errorMessage={apiErrorMessage(error)}
+        onRetry={refetch}
+        onPageChange={table.setPage}
+        toolbar={<>
+          {superAdmin && (
+            <Select className="w-auto" value={table.filters.etablissementId} onChange={(e) => table.setFilters({ etablissementId: e.target.value })}>
+              <option value="">Tous les établissements</option>
+              {(etablissements || []).map((et) => <option key={et.id} value={et.id}>{et.nom}</option>)}
+            </Select>
+          )}
+          <Select className="w-auto" value={table.filters.categorieId} onChange={(e) => table.setFilters({ categorieId: e.target.value })}>
+            <option value="">Toutes les catégories</option>
+            {(categories || []).map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
+          </Select>
+          <Select className="w-auto" value={table.filters.modePaiement} onChange={(e) => table.setFilters({ modePaiement: e.target.value })}>
+            <option value="">Tous les modes</option>
+            {MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </Select>
+          <input type="date" className="input w-auto" value={table.filters.dateDebut} onChange={(e) => table.setFilters({ dateDebut: e.target.value })} />
+          <input type="date" className="input w-auto" value={table.filters.dateFin} onChange={(e) => table.setFilters({ dateFin: e.target.value })} />
+        </>}
+        emptyLabel="Aucune vente sur cette période."
+      />
     </div>
   );
 }

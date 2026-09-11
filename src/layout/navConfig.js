@@ -1,116 +1,111 @@
 import {
-  LayoutDashboard, ShoppingCart, Receipt, CreditCard, Gift, Undo2,
-  UtensilsCrossed, ClipboardList, ChefHat, BookOpenText, Wine, Beer,
-  Boxes, PackagePlus, PackageMinus, Wallet, CircleDollarSign, Users,
-  ShieldCheck, ScrollText, BarChart3, TrendingUp, PieChart, LineChart,
-  Settings, DatabaseBackup, HelpCircle,
+  Users, ScrollText, Package, UtensilsCrossed, ShoppingCart, Receipt, ChefHat, Gift, Undo2, Truck,
+  ArrowLeftRight, PackageSearch, ClipboardList, Wallet, Tags, LineChart, BarChart3, TrendingUp,
+  Banknote, Boxes, PiggyBank, Settings, LifeBuoy, DatabaseBackup, Home, Wine, ArrowDownToLine, ArrowUpFromLine,
 } from 'lucide-react';
-import { MODULES } from '../lib/permissions';
 
-// Mirrors the 27-item menu from the cahier des charges §3, grouped for a
-// collapsible sidebar (as in the design reference). `module` keys are used
-// for role-based visibility against the droits matrix.
+// Arborescence imposée par menu_maquis_restaurant_cave.md (fourni par le client), dans son ordre
+// exact : navigation organisée PAR ÉTABLISSEMENT (Restaurant/Cave à vin/Maquis, chacun avec ses
+// propres Tables/Commandes/Menus/Factures/Remises/Avoirs) plutôt que la structure plate par module
+// précédente. Un groupe/item porteur de `etablissementNom` ne s'affiche, pour un Gérant/Caissier,
+// que si `user.etablissementNom` correspond — le Super Administrateur voit tout (Sidebar.jsx).
+// « Performance des caisses » (Reporting) reste absent : aucune page ne existe encore (nécessite
+// une session de caisse non construite, cf. Lot 5c). Les items « Stock X > Entrées/Sorties » sont
+// des raccourcis pré-filtrés vers la page unique Mouvements de stock (Sidebar ne gère que 2
+// niveaux de menu, pas 3) plutôt que des pages dédiées par établissement.
 export const NAV_GROUPS = [
+  { id: 'tableau-de-bord', label: 'Tableau de bord', icon: Home, to: '/tableau-de-bord' },
   {
-    id: 'dashboard',
-    label: 'Tableau de bord',
-    icon: LayoutDashboard,
-    to: '/dashboard',
-    module: MODULES.DASHBOARD,
-  },
-  {
-    id: 'ventes',
-    label: 'Ventes & Caisse',
-    icon: ShoppingCart,
-    module: MODULES.VENTES_CAISSE,
-    items: [
-      { label: 'Ventes / Caisse', to: '/ventes', icon: ShoppingCart, module: MODULES.VENTES_CAISSE },
-      { label: 'Factures', to: '/factures', icon: Receipt, module: MODULES.FACTURES },
-      { label: 'Gestion des caisses', to: '/caisses', icon: CreditCard, module: MODULES.CAISSES },
-      { label: 'Remises et promotions', to: '/remises', icon: Gift, module: MODULES.REMISES },
-      { label: 'Avoirs', to: '/avoirs', icon: Undo2, module: MODULES.AVOIRS },
+    id: 'restaurant', label: 'Restaurant', icon: UtensilsCrossed, etablissementNom: 'Restaurant', items: [
+      { label: 'Gestion des tables', icon: UtensilsCrossed, to: '/tables?etablissementId=2' },
+      { label: 'Commandes restaurant', icon: ShoppingCart, to: '/commandes?etablissementId=2' },
+      { label: 'Suivi cuisine', icon: ChefHat, to: '/suivi-cuisine' },
+      { label: 'Menus et tarifs', icon: Package, to: '/produits?etablissementId=2' },
+      { label: 'Factures', icon: Receipt, to: '/factures?etablissementId=2' },
+      { label: 'Remises et promotions', icon: Gift, to: '/remises?etablissementId=2' },
+      { label: 'Avoirs', icon: Undo2, to: '/avoirs?etablissementId=2' },
     ],
   },
   {
-    id: 'restaurant',
-    label: 'Restaurant',
-    icon: UtensilsCrossed,
-    module: MODULES.TABLES,
-    items: [
-      { label: 'Gestion des tables', to: '/tables', icon: UtensilsCrossed, module: MODULES.TABLES },
-      { label: 'Commandes restaurant', to: '/commandes-restaurant', icon: ClipboardList, module: MODULES.COMMANDES },
-      { label: 'Suivi cuisine', to: '/suivi-cuisine', icon: ChefHat, module: MODULES.CUISINE },
-      { label: 'Menus et tarifs', to: '/menus-tarifs', icon: BookOpenText, module: MODULES.MENUS },
+    id: 'cave', label: 'Cave à vin', icon: Wine, etablissementNom: 'Cave à vin', items: [
+      { label: 'Gestion des tables', icon: UtensilsCrossed, to: '/tables?etablissementId=3' },
+      { label: 'Commandes cave à vin', icon: ShoppingCart, to: '/commandes?etablissementId=3' },
+      { label: 'Menus et tarifs', icon: Package, to: '/produits?etablissementId=3' },
+      { label: 'Factures', icon: Receipt, to: '/factures?etablissementId=3' },
+      { label: 'Remises et promotions', icon: Gift, to: '/remises?etablissementId=3' },
+      { label: 'Avoirs', icon: Undo2, to: '/avoirs?etablissementId=3' },
     ],
   },
   {
-    id: 'cave',
-    label: 'Cave à vin',
-    icon: Wine,
-    to: '/cave-a-vin',
-    module: MODULES.CAVE,
+    id: 'maquis', label: 'Maquis', icon: ChefHat, etablissementNom: 'Maquis', items: [
+      { label: 'Gestion des tables', icon: UtensilsCrossed, to: '/tables?etablissementId=1' },
+      { label: 'Commandes maquis', icon: ShoppingCart, to: '/commandes?etablissementId=1' },
+      { label: 'Menus et tarifs', icon: Package, to: '/produits?etablissementId=1' },
+      { label: 'Factures', icon: Receipt, to: '/factures?etablissementId=1' },
+      { label: 'Remises et promotions', icon: Gift, to: '/remises?etablissementId=1' },
+      { label: 'Avoirs', icon: Undo2, to: '/avoirs?etablissementId=1' },
+    ],
   },
+  /* Masqué temporairement à la demande du client — code conservé pour réactivation ultérieure.
   {
-    id: 'maquis',
-    label: 'Maquis',
-    icon: Beer,
-    to: '/maquis',
-    module: MODULES.MAQUIS,
-  },
-  {
-    id: 'stocks',
-    label: 'Stocks',
-    icon: Boxes,
-    module: MODULES.STOCKS,
-    items: [
-      { label: 'Stocks et inventaire', to: '/stocks-inventaire', icon: Boxes, module: MODULES.STOCKS },
-      { label: 'Entrées en stock', to: '/entrees-stock', icon: PackagePlus, module: MODULES.ENTREES_STOCK },
-      { label: 'Sorties de stock', to: '/sorties-stock', icon: PackageMinus, module: MODULES.SORTIES_STOCK },
+    id: 'stocks', label: 'Stocks / Inventaire', icon: PackageSearch, items: [
+      { label: 'Fournisseurs', icon: Truck, to: '/fournisseurs' },
+      { label: 'Stock Restaurant — Entrées', icon: ArrowDownToLine, to: '/mouvements-stock?etablissementId=2&type=ENTREE', etablissementNom: 'Restaurant' },
+      { label: 'Stock Restaurant — Sorties', icon: ArrowUpFromLine, to: '/mouvements-stock?etablissementId=2&type=SORTIE', etablissementNom: 'Restaurant' },
+      { label: 'Stock Cave à vin — Entrées', icon: ArrowDownToLine, to: '/mouvements-stock?etablissementId=3&type=ENTREE', etablissementNom: 'Cave à vin' },
+      { label: 'Stock Cave à vin — Sorties', icon: ArrowUpFromLine, to: '/mouvements-stock?etablissementId=3&type=SORTIE', etablissementNom: 'Cave à vin' },
+      { label: 'Stock Maquis — Entrées', icon: ArrowDownToLine, to: '/mouvements-stock?etablissementId=1&type=ENTREE', etablissementNom: 'Maquis' },
+      { label: 'Stock Maquis — Sorties', icon: ArrowUpFromLine, to: '/mouvements-stock?etablissementId=1&type=SORTIE', etablissementNom: 'Maquis' },
+      { label: 'Inventaires', icon: ClipboardList, to: '/inventaires' },
+      { label: 'Transferts', icon: ArrowLeftRight, to: '/transferts', superAdminOnly: true },
     ],
   },
   {
-    id: 'financier',
-    label: 'Financier',
-    icon: Wallet,
-    module: MODULES.FINANCIER,
-    items: [
-      { label: 'Gestion financière', to: '/financier', icon: Wallet, module: MODULES.FINANCIER },
-      { label: 'Dépenses', to: '/depenses', icon: CircleDollarSign, module: MODULES.DEPENSES },
+    id: 'financier', label: 'Financier', icon: Wallet, items: [
+      { label: 'Gestion financière', icon: LineChart, to: '/gestion-financiere', superAdminOnly: true },
+      { label: 'Dépenses', icon: Wallet, to: '/depenses' },
+      { label: 'Catégories de dépenses', icon: Tags, to: '/categories-depenses', superAdminOnly: true },
     ],
   },
   {
-    id: 'utilisateurs',
-    label: 'Utilisateurs',
-    icon: Users,
-    module: MODULES.UTILISATEURS,
-    items: [
-      { label: 'Utilisateurs', to: '/utilisateurs', icon: Users, module: MODULES.UTILISATEURS },
-      { label: 'Profils et droits', to: '/profils-droits', icon: ShieldCheck, module: MODULES.PROFILS },
-      { label: 'Journal des opérations', to: '/journal-operations', icon: ScrollText, module: MODULES.JOURNAL },
+    id: 'reporting', label: 'Reporting', icon: BarChart3, items: [
+      { label: 'Dashboard reporting', icon: BarChart3, to: '/reporting/dashboard' },
+      { label: 'Rapport des ventes', icon: TrendingUp, to: '/reporting/ventes' },
+      { label: 'Rapport des stocks', icon: Boxes, to: '/reporting/stocks' },
+      { label: 'Rapport des recettes', icon: Banknote, to: '/reporting/recettes' },
+      { label: 'Rapport des bénéfices', icon: PiggyBank, to: '/reporting/benefices' },
+    ],
+  },
+  */
+  {
+    // Le groupe lui-même reste visible des deux profils : "Journal des opérations" l'est
+    // (RG-099, un Gérant/Caissier voit les entrées de son établissement), seul l'item
+    // "Utilisateurs" est réservé au Super Administrateur (matrice §3.3).
+    id: 'utilisateurs-groupe', label: 'Utilisateurs', icon: Users, items: [
+      { label: 'Utilisateurs', icon: Users, to: '/utilisateurs', superAdminOnly: true },
+      { label: 'Journal des opérations', icon: ScrollText, to: '/journal-operations' },
     ],
   },
   {
-    id: 'reporting',
-    label: 'Reporting',
-    icon: BarChart3,
-    module: MODULES.REPORTING,
-    items: [
-      { label: 'Dashboard reporting', to: '/reporting', icon: BarChart3, module: MODULES.REPORTING },
-      { label: 'Rapport des ventes', to: '/reporting/ventes', icon: TrendingUp, module: MODULES.REPORTING },
-      { label: 'Rapport des stocks', to: '/reporting/stocks', icon: PieChart, module: MODULES.REPORTING },
-      { label: 'Rapport des recettes', to: '/reporting/recettes', icon: CircleDollarSign, module: MODULES.REPORTING },
-      { label: 'Rapport des bénéfices', to: '/reporting/benefices', icon: LineChart, module: MODULES.REPORTING },
-    ],
-  },
-  {
-    id: 'parametres',
-    label: 'Paramètres',
-    icon: Settings,
-    module: MODULES.PARAMETRES,
-    items: [
-      { label: 'Paramètres généraux', to: '/parametres', icon: Settings, module: MODULES.PARAMETRES },
-      { label: 'Sauvegarde / Restauration', to: '/sauvegarde', icon: DatabaseBackup, module: MODULES.SAUVEGARDE },
-      { label: 'Aide / Support', to: '/aide', icon: HelpCircle, module: MODULES.AIDE },
+    // Le groupe reste visible des deux profils : "Aide / Support" l'est (EF-046) — seuls
+    // "Paramètres généraux" et "Sauvegarde/Restauration" sont réservés au Super Administrateur
+    // (RG-105/106).
+    id: 'parametres-groupe', label: 'Paramètres', icon: Settings, items: [
+      { label: 'Paramètres généraux', icon: Settings, to: '/parametres', superAdminOnly: true },
+      { label: 'Sauvegarde / Restauration', icon: DatabaseBackup, to: '/sauvegardes', superAdminOnly: true },
+      { label: 'Aide / Support', icon: LifeBuoy, to: '/aide' },
     ],
   },
 ];
+
+export function flattenNavLinks() {
+  const links = [];
+  for (const group of NAV_GROUPS) {
+    if (group.items) {
+      for (const item of group.items) links.push({ to: item.to });
+    } else if (group.to) {
+      links.push({ to: group.to });
+    }
+  }
+  return links;
+}

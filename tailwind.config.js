@@ -46,6 +46,7 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        display: ['"Playfair Display"', 'ui-serif', 'serif'],
       },
       boxShadow: {
         card: '0 1px 3px rgba(60, 30, 20, 0.08), 0 1px 2px rgba(60,30,20,0.06)',

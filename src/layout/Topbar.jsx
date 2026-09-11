@@ -1,17 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Search, Menu, Moon, Sun, LogOut, ChevronDown, User } from 'lucide-react';
+import { Menu, Moon, Sun, LogOut, ChevronDown, Search } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useAppStore } from '../store/appStore';
-import { useQuery } from '@tanstack/react-query';
 import api from '../lib/api';
-
-const ROLE_LABEL = {
-  ADMIN: 'Super Admin',
-  GERANT: 'Gérant',
-  CAISSIER_SERVEUR: 'Caissier / Serveur',
-  CUISINIER: 'Cuisinier',
-};
 
 export default function Topbar() {
   const navigate = useNavigate();
@@ -19,14 +11,6 @@ export default function Topbar() {
   const logout = useAuthStore((s) => s.logout);
   const { darkMode, toggleDarkMode, setSidebarMobileOpen } = useAppStore();
   const [menuOpen, setMenuOpen] = useState(false);
-
-  const { data: summary } = useQuery({
-    queryKey: ['dashboard-summary-alertes'],
-    queryFn: async () => (await api.get('/dashboard/summary')).data,
-    retry: 0,
-    staleTime: 60_000,
-  });
-  const alertCount = summary?.alertes?.length ?? 0;
 
   const today = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
 
@@ -60,15 +44,6 @@ export default function Topbar() {
           {darkMode ? <Sun size={18} /> : <Moon size={18} />}
         </button>
 
-        <button className="relative p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-ink-light dark:text-cream-200" title="Notifications">
-          <Bell size={18} />
-          {alertCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-0.5 rounded-full bg-danger text-white text-[10px] font-bold flex items-center justify-center">
-              {alertCount}
-            </span>
-          )}
-        </button>
-
         <div className="relative">
           <button
             onClick={() => setMenuOpen((o) => !o)}
@@ -79,7 +54,6 @@ export default function Topbar() {
             </div>
             <div className="hidden sm:block text-left leading-tight">
               <p className="text-sm font-semibold text-ink dark:text-cream-100">{user?.nom || user?.username}</p>
-              <p className="text-[11px] text-ink-light dark:text-cream-300/60">{ROLE_LABEL[user?.role] || user?.role}</p>
             </div>
             <ChevronDown size={14} className="text-ink-light hidden sm:block" />
           </button>
@@ -88,12 +62,6 @@ export default function Topbar() {
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
               <div className="absolute right-0 mt-2 w-48 rounded-xl bg-white dark:bg-night-800 shadow-popover border border-black/5 dark:border-white/10 py-1.5 z-20">
-                <button
-                  className="w-full flex items-center gap-2 px-3.5 py-2 text-sm text-ink dark:text-cream-100 hover:bg-cream-100 dark:hover:bg-white/5"
-                  onClick={() => { setMenuOpen(false); navigate('/parametres'); }}
-                >
-                  <User size={15} /> Mon profil
-                </button>
                 <button
                   className="w-full flex items-center gap-2 px-3.5 py-2 text-sm text-danger hover:bg-danger/5"
                   onClick={handleLogout}

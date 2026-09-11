@@ -22,6 +22,8 @@ const STATUS_COLOR = {
   OCCUPEE: 'red',
   RESERVEE: 'orange',
   // Commande / LigneCommande
+  NON_VALIDEE: 'orange',
+  ENVOYEE_CUISINE: 'blue',
   EN_ATTENTE: 'orange',
   EN_PREPARATION: 'blue',
   PRETE: 'green',
@@ -34,8 +36,9 @@ const STATUS_COLOR = {
   BROUILLON: 'orange',
   // Depense
   VALIDEE: 'green',
-  // Inventaire
-  // (EN_COURS / VALIDE already covered)
+  // Inventaire (§6.6.5 : Brouillon -> En comptage -> Clôturé -> Validé)
+  EN_COMPTAGE: 'blue',
+  CLOTURE: 'gold',
   // Remise / entities actif
   ACTIF: 'green',
   ACTIVE: 'green',
@@ -57,6 +60,8 @@ const STATUS_LABEL = {
   LIBRE: 'Libre',
   OCCUPEE: 'Occupée',
   RESERVEE: 'Réservée',
+  NON_VALIDEE: 'Non validée',
+  ENVOYEE_CUISINE: 'Envoyée en cuisine',
   EN_ATTENTE: 'En attente',
   EN_PREPARATION: 'En préparation',
   PRETE: 'Prête',
@@ -66,6 +71,8 @@ const STATUS_LABEL = {
   VALIDE: 'Validé',
   VALIDEE: 'Validée',
   BROUILLON: 'Brouillon',
+  EN_COMPTAGE: 'En comptage',
+  CLOTURE: 'Clôturé',
   ACTIF: 'Actif',
   ACTIVE: 'Active',
   INACTIF: 'Inactif',

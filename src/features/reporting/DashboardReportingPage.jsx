@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Download, FileSpreadsheet, Info } from 'lucide-react';
+import { Download, FileSpreadsheet } from 'lucide-react';
 import api, { apiErrorMessage } from '../../lib/api';
 import { downloadExport } from '../../lib/download';
 import PageHeader from '../../components/ui/PageHeader';
 import { Select } from '../../components/ui/Field';
 import { Loader, ErrorState } from '../../components/ui/Feedback';
-import { formatFCFA, periodePreset, todayISO } from '../../lib/format';
+import { SalesLineChart, DonutChart, Legend2, PALETTE } from '../../components/ui/Charts';
+import { formatFCFA, formatNumber, periodePreset, todayISO } from '../../lib/format';
 import { useToast } from '../../components/ui/Toast';
 import { useAuthStore } from '../../store/authStore';
 import { isSuperAdmin } from '../../lib/perimetre';
@@ -19,9 +20,8 @@ const PRESETS = [
   { value: 'annee', label: 'Cette année' },
 ];
 
-/** §6.9.3 : chiffre d'affaires, coût des marchandises vendues, marge brute, dépenses, résultat —
- * par établissement. */
-export default function RapportBeneficesPage() {
+/** §6.9.3 : synthèse graphique — évolution du CA, répartition par établissement/mode, top produits. */
+export default function DashboardReportingPage() {
   const toast = useToast();
   const user = useAuthStore((s) => s.user);
   const superAdmin = isSuperAdmin(user);
@@ -34,8 +34,8 @@ export default function RapportBeneficesPage() {
 
   const params = { dateDebut, dateFin, etablissementId: etablissementId || undefined };
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['reporting-benefices', params],
-    queryFn: async () => (await api.get('/reporting/benefices', { params })).data,
+    queryKey: ['reporting-dashboard', params],
+    queryFn: async () => (await api.get('/reporting/dashboard', { params })).data,
   });
 
   function applyPreset(value) {
@@ -45,20 +45,20 @@ export default function RapportBeneficesPage() {
 
   async function exporter(format) {
     try {
-      await downloadExport('/reporting/benefices/export', { ...params, format }, `rapport-benefices.${format === 'excel' ? 'xlsx' : 'pdf'}`);
+      await downloadExport('/reporting/dashboard/export', { ...params, format }, `dashboard.${format === 'excel' ? 'xlsx' : 'pdf'}`);
     } catch (e) {
       toast.error(apiErrorMessage(e));
     }
   }
 
-  const lignes = data?.lignes || [];
-  const total = data?.total;
+  const parEtablissement = (data?.parEtablissement || []).map((r) => ({ label: r.label, pourcentage: r.montant }));
+  const parMode = (data?.parModePaiement || []).map((r) => ({ label: r.label, value: r.montant, color: undefined }));
 
   return (
     <div>
       <PageHeader
-        title="Rapport des bénéfices"
-        subtitle="Chiffre d'affaires, coût des marchandises vendues, marge brute et résultat par établissement (§6.9.3)."
+        title="Tableau de bord"
+        subtitle="Synthèse graphique du chiffre d'affaires (§6.9.3, EF-042 : période et périmètre indiqués ci-dessous)."
         actions={<>
           <button className="btn-secondary" onClick={() => exporter('pdf')}><Download size={15} /> PDF</button>
           <button className="btn-secondary" onClick={() => exporter('excel')}><FileSpreadsheet size={15} /> Excel</button>
@@ -96,51 +96,62 @@ export default function RapportBeneficesPage() {
       {isLoading && <Loader />}
       {isError && <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />}
 
-      {!isLoading && !isError && (
-        <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
+      {!isLoading && !isError && data && (
+        <div className="flex flex-col gap-4">
+          <div className="card p-5">
+            <p className="text-xs font-semibold uppercase text-ink-light">Chiffre d'affaires total</p>
+            <p className="text-3xl font-extrabold text-bordeaux-700 dark:text-gold mt-1">{formatFCFA(data.caTotal)}</p>
+          </div>
+
+          <div className="card p-5">
+            <p className="font-bold mb-3">Évolution du chiffre d'affaires</p>
+            {data.evolutionCA.length > 0
+              ? <SalesLineChart data={data.evolutionCA} xKey="date" yKey="montant" />
+              : <p className="text-sm text-ink-light py-8 text-center">Aucune vente sur cette période.</p>}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {parEtablissement.length > 0 && (
+              <div className="card p-5">
+                <p className="font-bold mb-3">Répartition par établissement</p>
+                <DonutChart data={parEtablissement} />
+                <Legend2 items={parEtablissement.map((r, i) => ({ label: r.label, value: formatFCFA(r.pourcentage), color: PALETTE[i % PALETTE.length] }))} />
+              </div>
+            )}
+            <div className="card p-5">
+              <p className="font-bold mb-3">Répartition par mode de paiement</p>
+              {parMode.length > 0 ? (
+                <Legend2 items={parMode.map((r, i) => ({ label: r.label, value: formatFCFA(r.value), color: PALETTE[i % PALETTE.length] }))} />
+              ) : <p className="text-sm text-ink-light py-4 text-center">Aucune donnée.</p>}
+            </div>
+          </div>
+
+          <div className="card overflow-hidden">
+            <p className="font-bold px-5 pt-4 pb-2">Top produits</p>
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-cream-100/70 dark:bg-white/5 text-left">
-                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide text-ink-light">Établissement</th>
-                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide text-ink-light text-right">CA</th>
-                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide text-ink-light text-right">CMV</th>
-                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide text-ink-light text-right">Marge brute</th>
-                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide text-ink-light text-right">Dépenses</th>
-                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide text-ink-light text-right">
-                    <span className="inline-flex items-center gap-1 justify-end w-full" title="Résultat = Marge brute − Dépenses = (CA − CMV) − Dépenses">
-                      Résultat <Info size={12} />
-                    </span>
-                  </th>
+                  <th className="px-4 py-2 text-[11px] font-bold uppercase text-ink-light">Produit</th>
+                  <th className="px-4 py-2 text-[11px] font-bold uppercase text-ink-light text-right">Quantité</th>
+                  <th className="px-4 py-2 text-[11px] font-bold uppercase text-ink-light text-right">Montant</th>
                 </tr>
               </thead>
               <tbody>
-                {lignes.map((l) => (
-                  <tr key={l.etablissementId} className="border-t border-black/5 dark:border-white/5">
-                    <td className="px-4 py-2.5 font-medium">{l.etablissementNom}</td>
-                    <td className="px-4 py-2.5 text-right">{formatFCFA(l.chiffreAffaires)}</td>
-                    <td className="px-4 py-2.5 text-right">-{formatFCFA(l.cmv)}</td>
-                    <td className="px-4 py-2.5 text-right">{formatFCFA(l.margeBrute)}</td>
-                    <td className="px-4 py-2.5 text-right">-{formatFCFA(l.depenses)}</td>
-                    <td className={`px-4 py-2.5 text-right font-bold ${l.resultat < 0 ? 'text-danger' : 'text-success'}`}>{formatFCFA(l.resultat)}</td>
+                {data.topProduits.map((p) => (
+                  <tr key={p.produitId} className="border-t border-black/5 dark:border-white/5">
+                    <td className="px-4 py-2">{p.produitNom}</td>
+                    <td className="px-4 py-2 text-right">{formatNumber(p.quantite)}</td>
+                    <td className="px-4 py-2 text-right">{formatFCFA(p.montant)}</td>
                   </tr>
                 ))}
-                {total && (
-                  <tr className="border-t-2 border-black/10 dark:border-white/20 bg-cream-100/50 dark:bg-white/5 font-bold">
-                    <td className="px-4 py-2.5">TOTAL</td>
-                    <td className="px-4 py-2.5 text-right">{formatFCFA(total.chiffreAffaires)}</td>
-                    <td className="px-4 py-2.5 text-right">-{formatFCFA(total.cmv)}</td>
-                    <td className="px-4 py-2.5 text-right">{formatFCFA(total.margeBrute)}</td>
-                    <td className="px-4 py-2.5 text-right">-{formatFCFA(total.depenses)}</td>
-                    <td className={`px-4 py-2.5 text-right ${total.resultat < 0 ? 'text-danger' : 'text-success'}`}>{formatFCFA(total.resultat)}</td>
-                  </tr>
-                )}
-                {lignes.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-ink-light">Aucune donnée pour ce périmètre.</td></tr>
+                {data.topProduits.length === 0 && (
+                  <tr><td colSpan={3} className="px-4 py-6 text-center text-ink-light">Aucune vente sur cette période.</td></tr>
                 )}
               </tbody>
             </table>
           </div>
+
+          <p className="text-xs text-ink-light">Généré par {data.genereParNom} le {new Date(data.dateGeneration).toLocaleString('fr-FR')}</p>
         </div>
       )}
     </div>

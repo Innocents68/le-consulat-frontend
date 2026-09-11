@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { Plus, Pencil, KeyRound, Power, Loader2 } from 'lucide-react';
 import api, { apiErrorMessage } from '../../lib/api';
 import DataTable from '../../components/ui/DataTable';
@@ -11,15 +11,19 @@ import { useTableState } from '../../hooks/useTableState';
 import { useListQuery } from '../../hooks/useResource';
 import { formatDate } from '../../lib/format';
 import { useToast } from '../../components/ui/Toast';
-import { ROLES } from '../../lib/permissions';
+import { PROFIL_LABEL } from '../../lib/perimetre';
 
-const EMPTY = { username: '', nom: '', email: '', telephone: '', role: 'CAISSIER_SERVEUR', motDePasse: 'password123' };
+const EMPTY = { username: '', nom: '', email: '', telephone: '', profil: 'GERANT_CAISSIER', etablissementId: '', motDePasse: 'admin123' };
 
 export default function UtilisateursPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const table = useTableState({ initialSize: 10 });
   const { data, isLoading, isError, error, refetch } = useListQuery('utilisateurs', table.params);
+  const { data: etablissements } = useQuery({
+    queryKey: ['etablissements'],
+    queryFn: async () => (await api.get('/etablissements')).data,
+  });
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -49,18 +53,22 @@ export default function UtilisateursPage() {
   });
 
   function openCreate() { setEditing(null); setForm(EMPTY); setModalOpen(true); }
-  function openEdit(u) { setEditing(u); setForm(u); setModalOpen(true); }
+  function openEdit(u) { setEditing(u); setForm({ ...u, etablissementId: u.etablissementId || '' }); setModalOpen(true); }
   function handleSubmit(e) {
     e.preventDefault();
-    if (editing) update.mutate({ id: editing.id, ...form });
-    else create.mutate(form);
+    // Le Super Administrateur n'a pas d'établissement (vision globale, RG-005) — jamais choisi
+    // librement pour les autres profils non plus, mais ici on envoie simplement la valeur du
+    // select (obligatoire côté backend pour tout profil != Super Administrateur, RG-004).
+    const payload = { ...form, etablissementId: form.profil === 'SUPER_ADMINISTRATEUR' ? null : (form.etablissementId || null) };
+    if (editing) update.mutate({ id: editing.id, ...payload });
+    else create.mutate(payload);
   }
 
   return (
     <div>
       <PageHeader
         title="Utilisateurs"
-        subtitle="Comptes du personnel et leurs profils d'accès."
+        subtitle="Comptes du personnel et leur affectation."
         actions={<button className="btn-primary" onClick={openCreate}><Plus size={16} /> Nouvel utilisateur</button>}
       />
 
@@ -68,7 +76,8 @@ export default function UtilisateursPage() {
         columns={[
           { key: 'nom', header: 'Nom', sortable: true },
           { key: 'username', header: 'Identifiant' },
-          { key: 'role', header: 'Rôle', render: (r) => ROLES.find((x) => x.value === r.role)?.label || r.role },
+          { key: 'profil', header: 'Profil', render: (r) => PROFIL_LABEL[r.profil] || r.profil },
+          { key: 'etablissementNom', header: 'Établissement', render: (r) => r.etablissementNom || '— (tous)' },
           { key: 'telephone', header: 'Téléphone' },
           { key: 'dateCreation', header: 'Créé le', render: (r) => formatDate(r.dateCreation) },
           { key: 'actif', header: 'Statut', render: (r) => <StatusBadge status={r.actif} /> },
@@ -113,14 +122,22 @@ export default function UtilisateursPage() {
             <Field label="Email"><input type="email" className="input" value={form.email || ''} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></Field>
             <Field label="Téléphone"><input className="input" value={form.telephone || ''} onChange={(e) => setForm((f) => ({ ...f, telephone: e.target.value }))} /></Field>
           </div>
-          <Field label="Rôle" required>
-            <Select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}>
-              {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+          <Field label="Profil" required>
+            <Select value={form.profil} onChange={(e) => setForm((f) => ({ ...f, profil: e.target.value }))}>
+              {Object.entries(PROFIL_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </Select>
           </Field>
+          {form.profil !== 'SUPER_ADMINISTRATEUR' && (
+            <Field label="Établissement d'affectation" required hint="Cet utilisateur n'aura accès qu'aux données de l'établissement sélectionné.">
+              <Select value={form.etablissementId || ''} onChange={(e) => setForm((f) => ({ ...f, etablissementId: e.target.value }))}>
+                <option value="" disabled>Choisir un établissement</option>
+                {(etablissements || []).map((et) => <option key={et.id} value={et.id}>{et.nom}</option>)}
+              </Select>
+            </Field>
+          )}
           {!editing && (
             <Field label="Mot de passe initial" required>
-              <input className="input" value={form.motDePasse} onChange={(e) => setForm((f) => ({ ...f, motDePasse: e.target.value }))} required />
+              <input type="password" className="input" value={form.motDePasse} onChange={(e) => setForm((f) => ({ ...f, motDePasse: e.target.value }))} required />
             </Field>
           )}
         </form>
@@ -138,7 +155,7 @@ export default function UtilisateursPage() {
         </>}
       >
         <Field label="Nouveau mot de passe" required>
-          <input className="input" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoFocus />
+          <input type="password" className="input" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoFocus />
         </Field>
       </Modal>
     </div>

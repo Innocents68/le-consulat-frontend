@@ -1,19 +1,31 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { NavLink, useLocation } from 'react-router-dom';
 import { ChevronDown, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
 import { NAV_GROUPS } from './navConfig';
 import { useAppStore } from '../store/appStore';
-import { usePermissions } from '../hooks/usePermissions';
+import { useAuthStore } from '../store/authStore';
+import { isSuperAdmin } from '../lib/perimetre';
+import api, { fileUrl } from '../lib/api';
 
+/** §6.10.1 (EF-043) : le logo configuré dans les Paramètres remplace le badge texte fixe dès
+ * qu'il existe — sinon le badge par défaut reste affiché (dégradation normale, pas une erreur). */
 function LogoBadge({ collapsed }) {
+  const { data: parametres } = useQuery({ queryKey: ['parametres-publics'], queryFn: async () => (await api.get('/parametres/publics')).data });
+  const nom = parametres?.nomMagasin || 'LE CONSULAT';
+
   return (
     <div className={`flex items-center gap-3 px-4 py-5 ${collapsed ? 'justify-center px-2' : ''}`}>
-      <div className="shrink-0 h-11 w-11 rounded-full bg-gold/90 border-2 border-gold-light flex items-center justify-center text-bordeaux-900 font-black text-[9px] leading-none text-center">
-        LE<br />CONSULAT
-      </div>
+      {parametres?.logoUrl ? (
+        <img src={fileUrl(parametres.logoUrl)} alt={nom} className="shrink-0 h-11 w-11 rounded-full object-cover border-2 border-gold-light" />
+      ) : (
+        <div className="shrink-0 h-11 w-11 rounded-full bg-gold/90 border-2 border-gold-light flex items-center justify-center text-bordeaux-900 font-black text-[9px] leading-none text-center">
+          LE<br />CONSULAT
+        </div>
+      )}
       {!collapsed && (
         <div className="leading-tight">
-          <p className="font-extrabold tracking-wide text-white text-[15px]">LE CONSULAT</p>
+          <p className="font-extrabold tracking-wide text-white text-[15px]">{nom}</p>
           <p className="text-[10px] uppercase tracking-[0.15em] text-cream-200/70">Cave - Restaurant</p>
         </div>
       )}
@@ -41,10 +53,16 @@ function GroupLink({ item, collapsed, onNavigate }) {
   );
 }
 
-function GroupWithChildren({ group, collapsed, onNavigate }) {
+function GroupWithChildren({ group, collapsed, onNavigate, superAdmin, user }) {
   const location = useLocation();
-  const containsActive = group.items.some((it) => location.pathname.startsWith(it.to));
+  const items = group.items.filter((it) =>
+    (!it.superAdminOnly || superAdmin) && (!it.etablissementNom || superAdmin || user?.etablissementNom === it.etablissementNom));
+  const containsActive = items.some((it) => location.pathname.startsWith(it.to.split('?')[0]));
   const [open, setOpen] = useState(containsActive);
+
+  if (items.length === 0) {
+    return null;
+  }
 
   if (collapsed) {
     return (
@@ -58,7 +76,7 @@ function GroupWithChildren({ group, collapsed, onNavigate }) {
           <group.icon size={18} />
         </button>
         <div className="hidden group-hover/nav:block absolute left-full top-0 ml-1 w-52 rounded-lg bg-bordeaux-800 shadow-popover py-1.5 z-50 border border-white/10">
-          {group.items.map((item) => (
+          {items.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -89,7 +107,7 @@ function GroupWithChildren({ group, collapsed, onNavigate }) {
       </button>
       {open && (
         <div className="ml-4 mt-0.5 mb-1 flex flex-col gap-0.5 border-l border-white/15 pl-3">
-          {group.items.map((item) => (
+          {items.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -112,18 +130,13 @@ function GroupWithChildren({ group, collapsed, onNavigate }) {
 
 export default function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, sidebarMobileOpen, setSidebarMobileOpen } = useAppStore();
-  const { canView } = usePermissions();
+  const user = useAuthStore((s) => s.user);
+  const superAdmin = isSuperAdmin(user);
 
-  const visibleGroups = NAV_GROUPS
-    .map((g) => {
-      if (g.items) {
-        const items = g.items.filter((it) => canView(it.module));
-        if (items.length === 0) return null;
-        return { ...g, items };
-      }
-      return canView(g.module) ? g : null;
-    })
-    .filter(Boolean);
+  const visibleGroups = NAV_GROUPS.filter((g) =>
+    (!g.superAdminOnly || superAdmin) &&
+    (!g.cuisineOnly || superAdmin || user?.etablissementGereCuisine) &&
+    (!g.etablissementNom || superAdmin || user?.etablissementNom === g.etablissementNom));
 
   const closeMobile = () => setSidebarMobileOpen(false);
 
@@ -152,7 +165,7 @@ export default function Sidebar() {
         <nav className="flex-1 overflow-y-auto px-2.5 flex flex-col gap-1 pb-4">
           {visibleGroups.map((g) =>
             g.items ? (
-              <GroupWithChildren key={g.id} group={g} collapsed={sidebarCollapsed} onNavigate={closeMobile} />
+              <GroupWithChildren key={g.id} group={g} collapsed={sidebarCollapsed} onNavigate={closeMobile} superAdmin={superAdmin} user={user} />
             ) : (
               <GroupLink key={g.id} item={g} collapsed={sidebarCollapsed} onNavigate={closeMobile} />
             )
