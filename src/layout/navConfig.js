@@ -10,8 +10,8 @@ import {
 // précédente. Un groupe/item porteur de `etablissementNom` ne s'affiche, pour un Gérant/Caissier,
 // que si `user.etablissementNom` correspond — le Super Administrateur voit tout (Sidebar.jsx).
 // « Performance des caisses » (Reporting) reste absent : aucune page ne existe encore (nécessite
-// une session de caisse non construite, cf. Lot 5c). Les items « Stock X > Entrées/Sorties » sont
-// des raccourcis pré-filtrés vers la page unique Mouvements de stock (Sidebar ne gère que 2
+// une session de caisse non construite, cf. Lot 5c). Les items « Stock X > Entrées/Sorties »
+// sont des raccourcis pré-filtrés vers la page unique Mouvements de stock (Sidebar ne gère que 2
 // niveaux de menu, pas 3) plutôt que des pages dédiées par établissement.
 export const NAV_GROUPS = [
   { id: 'tableau-de-bord', label: 'Tableau de bord', icon: Home, to: '/tableau-de-bord' },
@@ -46,7 +46,6 @@ export const NAV_GROUPS = [
       { label: 'Avoirs', icon: Undo2, to: '/avoirs?etablissementId=1' },
     ],
   },
-  /* Masqué temporairement à la demande du client — code conservé pour réactivation ultérieure.
   {
     id: 'stocks', label: 'Stocks / Inventaire', icon: PackageSearch, items: [
       { label: 'Fournisseurs', icon: Truck, to: '/fournisseurs' },
@@ -76,7 +75,6 @@ export const NAV_GROUPS = [
       { label: 'Rapport des bénéfices', icon: PiggyBank, to: '/reporting/benefices' },
     ],
   },
-  */
   {
     // Le groupe lui-même reste visible des deux profils : "Journal des opérations" l'est
     // (RG-099, un Gérant/Caissier voit les entrées de son établissement), seul l'item
