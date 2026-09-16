@@ -59,6 +59,7 @@ export default function SuiviCuisinePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suivi-cuisine'] });
       queryClient.invalidateQueries({ queryKey: ['tables-libres'] });
+      queryClient.invalidateQueries({ queryKey: ['tables'] });
     },
     onError: (e) => toast.error(apiErrorMessage(e)),
   });

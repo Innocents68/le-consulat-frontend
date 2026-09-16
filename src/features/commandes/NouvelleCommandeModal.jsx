@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Minus, Trash2, Search } from 'lucide-react';
 import api, { apiErrorMessage, fetchPage } from '../../lib/api';
@@ -12,7 +12,7 @@ import { isSuperAdmin } from '../../lib/perimetre';
 /** Écran de saisie d'une commande (§6.2.2) : catalogue à gauche, panier à droite, table
  * optionnelle (PC-07 — vente à emporter/comptoir). Ne gère que la création : modifier une
  * commande non validée se fait depuis le détail dans CommandesPage. */
-export default function NouvelleCommandeModal({ open, onClose }) {
+export default function NouvelleCommandeModal({ open, onClose, presetEtablissementId, presetTableId }) {
   const toast = useToast();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
@@ -23,6 +23,16 @@ export default function NouvelleCommandeModal({ open, onClose }) {
   const [clientNom, setClientNom] = useState('');
   const [cart, setCart] = useState([]); // [{ produitId, nom, prixVente, quantite }]
   const [rechercheCatalogue, setRechercheCatalogue] = useState('');
+
+  // Ouverture depuis le plan de salle (Table.png) : la table (et son établissement) sont déjà
+  // choisis, pas besoin de repasser par les champs de sélection.
+  useEffect(() => {
+    if (open) {
+      setEtablissementId(presetEtablissementId ? String(presetEtablissementId) : '');
+      setTableId(presetTableId ? String(presetTableId) : '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const etabActif = superAdmin ? etablissementId : user?.etablissementId;
 
@@ -41,7 +51,7 @@ export default function NouvelleCommandeModal({ open, onClose }) {
   const produitsDisponibles = (produits?.rows || [])
     .filter((p) => p.disponible)
     .filter((p) => p.nom.toLowerCase().includes(rechercheCatalogue.trim().toLowerCase()));
-  const tablesLibres = (tables || []).filter((t) => t.statut === 'LIBRE');
+  const tablesLibres = (tables || []).filter((t) => t.statut === 'LIBRE' || String(t.id) === tableId);
 
   const total = useMemo(() => cart.reduce((sum, l) => sum + l.prixVente * l.quantite, 0), [cart]);
 
@@ -50,6 +60,7 @@ export default function NouvelleCommandeModal({ open, onClose }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['commandes'] });
       queryClient.invalidateQueries({ queryKey: ['tables-libres'] });
+      queryClient.invalidateQueries({ queryKey: ['tables'] });
       toast.success('Commande créée.');
       resetEtFermer();
     },

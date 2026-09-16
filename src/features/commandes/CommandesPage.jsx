@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Eye, Ban, CreditCard, FileText, Trash2 } from 'lucide-react';
@@ -30,8 +30,10 @@ export default function CommandesPage() {
   // Préremplissage depuis un raccourci du Tableau de bord (?etablissementId=X) — un Gérant/Caissier
   // est de toute façon forcé sur son propre établissement côté backend, la valeur lue ici est donc
   // sans effet pour lui, seulement utile au Super Administrateur.
-  const etablissementIdInitial = new URLSearchParams(window.location.search).get('etablissementId') || '';
-  const table = useTableState({ initialSize: 10, extraFilters: { etablissementId: etablissementIdInitial, statut: '' } });
+  const params = new URLSearchParams(window.location.search);
+  const etablissementIdInitial = params.get('etablissementId') || '';
+  const tableIdInitial = params.get('tableId') || '';
+  const table = useTableState({ initialSize: 10, extraFilters: { etablissementId: etablissementIdInitial, tableId: tableIdInitial, statut: '' } });
   const { data, isLoading, isError, error, refetch } = useListQuery('commandes', table.params);
   const { data: etablissements } = useQuery({ queryKey: ['etablissements'], queryFn: async () => (await api.get('/etablissements')).data });
 
@@ -46,6 +48,19 @@ export default function CommandesPage() {
     queryFn: async () => (await api.get(`/commandes/${detailId}`)).data,
     enabled: !!detailId,
   });
+
+  // Arrivée depuis le plan de salle (carte rouge "Voir la commande en cours", ?tableId=X) :
+  // ouvre directement le détail de la commande active de cette table. Le ref garantit que ça
+  // n'arrive qu'une fois — sans lui, fermer la modale repasserait la condition à vrai et la
+  // rouvrirait aussitôt (même bug déjà corrigé sur FacturesPage).
+  const autoOuvert = useRef(false);
+  useEffect(() => {
+    if (tableIdInitial && data?.rows?.length === 1 && !autoOuvert.current) {
+      autoOuvert.current = true;
+      setDetailId(data.rows[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
   const { data: remisesDisponibles } = useQuery({
     queryKey: ['remises', detail?.etablissementId],
     queryFn: async () => (await api.get('/remises', { params: { etablissementId: detail.etablissementId } })).data,
@@ -75,6 +90,7 @@ export default function CommandesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['commandes'] });
       queryClient.invalidateQueries({ queryKey: ['tables-libres'] });
+      queryClient.invalidateQueries({ queryKey: ['tables'] });
       toast.success('Commande annulée.');
       setAnnulerCible(null);
       setMotif('');

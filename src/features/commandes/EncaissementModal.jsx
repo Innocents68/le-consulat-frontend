@@ -36,6 +36,7 @@ export default function EncaissementModal({ commande, onClose, onEncaisse }) {
     onSuccess: (facture) => {
       queryClient.invalidateQueries({ queryKey: ['commandes'] });
       queryClient.invalidateQueries({ queryKey: ['tables-libres'] });
+      queryClient.invalidateQueries({ queryKey: ['tables'] });
       toast.success(`Paiement validé — facture ${facture.numero}.`);
       onEncaisse(facture);
     },
