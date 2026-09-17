@@ -20,7 +20,7 @@ export const NAV_GROUPS = [
       { label: 'Gestion des tables', icon: UtensilsCrossed, to: '/tables?etablissementId=2' },
       { label: 'Commandes restaurant', icon: ShoppingCart, to: '/commandes?etablissementId=2' },
       { label: 'Suivi cuisine', icon: ChefHat, to: '/suivi-cuisine' },
-      { label: 'Menus et tarifs', icon: Package, to: '/produits?etablissementId=2' },
+      { label: 'Produits (menus et tarifs)', icon: Package, to: '/produits?etablissementId=2' },
       { label: 'Factures', icon: Receipt, to: '/factures?etablissementId=2' },
       { label: 'Remises et promotions', icon: Gift, to: '/remises?etablissementId=2' },
       { label: 'Avoirs', icon: Undo2, to: '/avoirs?etablissementId=2' },
@@ -30,7 +30,7 @@ export const NAV_GROUPS = [
     id: 'cave', label: 'Cave à vin', icon: Wine, etablissementNom: 'Cave à vin', items: [
       { label: 'Gestion des tables', icon: UtensilsCrossed, to: '/tables?etablissementId=3' },
       { label: 'Commandes cave à vin', icon: ShoppingCart, to: '/commandes?etablissementId=3' },
-      { label: 'Menus et tarifs', icon: Package, to: '/produits?etablissementId=3' },
+      { label: 'Produits (menus et tarifs)', icon: Package, to: '/produits?etablissementId=3' },
       { label: 'Factures', icon: Receipt, to: '/factures?etablissementId=3' },
       { label: 'Remises et promotions', icon: Gift, to: '/remises?etablissementId=3' },
       { label: 'Avoirs', icon: Undo2, to: '/avoirs?etablissementId=3' },
@@ -40,7 +40,7 @@ export const NAV_GROUPS = [
     id: 'maquis', label: 'Maquis', icon: ChefHat, etablissementNom: 'Maquis', items: [
       { label: 'Gestion des tables', icon: UtensilsCrossed, to: '/tables?etablissementId=1' },
       { label: 'Commandes maquis', icon: ShoppingCart, to: '/commandes?etablissementId=1' },
-      { label: 'Menus et tarifs', icon: Package, to: '/produits?etablissementId=1' },
+      { label: 'Produits (menus et tarifs)', icon: Package, to: '/produits?etablissementId=1' },
       { label: 'Factures', icon: Receipt, to: '/factures?etablissementId=1' },
       { label: 'Remises et promotions', icon: Gift, to: '/remises?etablissementId=1' },
       { label: 'Avoirs', icon: Undo2, to: '/avoirs?etablissementId=1' },

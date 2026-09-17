@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Minus, Trash2, Search } from 'lucide-react';
+import { Plus, Minus, Trash2, Search, QrCode } from 'lucide-react';
 import api, { apiErrorMessage, fetchPage } from '../../lib/api';
 import Modal from '../../components/ui/Modal';
+import QrScannerModal from '../../components/ui/QrScannerModal';
 import { Field, Select } from '../../components/ui/Field';
 import { formatFCFA } from '../../lib/format';
 import { useToast } from '../../components/ui/Toast';
@@ -23,6 +24,7 @@ export default function NouvelleCommandeModal({ open, onClose, presetEtablisseme
   const [clientNom, setClientNom] = useState('');
   const [cart, setCart] = useState([]); // [{ produitId, nom, prixVente, quantite }]
   const [rechercheCatalogue, setRechercheCatalogue] = useState('');
+  const [scannerOuvert, setScannerOuvert] = useState(false);
 
   // Ouverture depuis le plan de salle (Table.png) : la table (et son établissement) sont déjà
   // choisis, pas besoin de repasser par les champs de sélection.
@@ -73,6 +75,27 @@ export default function NouvelleCommandeModal({ open, onClose, presetEtablisseme
     setCart([]);
     setRechercheCatalogue('');
     onClose();
+  }
+
+  // Recommandations et corrections.md §7 : le texte décodé est envoyé tel quel au backend, qui
+  // en extrait l'id et applique le même contrôle de périmètre que GET /produits/{id}.
+  async function traiterScan(texteDecode) {
+    setScannerOuvert(false);
+    try {
+      const { data: produit } = await api.get('/produits/scanner', { params: { code: texteDecode } });
+      if (String(produit.etablissementId) !== String(etabActif)) {
+        toast.error(`Ce produit appartient à un autre établissement (${produit.etablissementNom}).`);
+        return;
+      }
+      if (!produit.disponible || !produit.actif) {
+        toast.error(`${produit.nom} n'est pas disponible.`);
+        return;
+      }
+      ajouterAuPanier(produit);
+      toast.success(`${produit.nom} ajouté au panier.`);
+    } catch (e) {
+      toast.error(apiErrorMessage(e, 'QR code non reconnu.'));
+    }
   }
 
   function ajouterAuPanier(produit) {
@@ -135,14 +158,19 @@ export default function NouvelleCommandeModal({ open, onClose, presetEtablisseme
       <div className="grid grid-cols-2 gap-4">
         <div>
           <p className="text-xs font-semibold uppercase text-ink-light mb-2">Catalogue</p>
-          <div className="relative mb-2">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-light" />
-            <input
-              className="input pl-8"
-              placeholder="Rechercher un produit..."
-              value={rechercheCatalogue}
-              onChange={(e) => setRechercheCatalogue(e.target.value)}
-            />
+          <div className="flex gap-2 mb-2">
+            <div className="relative flex-1">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-light" />
+              <input
+                className="input pl-8"
+                placeholder="Rechercher un produit..."
+                value={rechercheCatalogue}
+                onChange={(e) => setRechercheCatalogue(e.target.value)}
+              />
+            </div>
+            <button type="button" className="btn-secondary shrink-0" disabled={!etabActif} onClick={() => setScannerOuvert(true)}>
+              <QrCode size={15} /> Scanner
+            </button>
           </div>
           <div className="grid grid-cols-2 gap-2 max-h-80 overflow-y-auto">
             {produitsDisponibles.map((p) => (
@@ -183,6 +211,8 @@ export default function NouvelleCommandeModal({ open, onClose, presetEtablisseme
           </div>
         </div>
       </div>
+
+      <QrScannerModal open={scannerOuvert} onClose={() => setScannerOuvert(false)} onScan={traiterScan} title="Scanner un produit" />
     </Modal>
   );
 }

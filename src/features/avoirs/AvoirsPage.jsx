@@ -5,6 +5,7 @@ import api, { apiErrorMessage, openAuthenticatedFile } from '../../lib/api';
 import DataTable from '../../components/ui/DataTable';
 import Modal from '../../components/ui/Modal';
 import PageHeader from '../../components/ui/PageHeader';
+import StatusBadge from '../../components/ui/StatusBadge';
 import { Select } from '../../components/ui/Field';
 import { useTableState } from '../../hooks/useTableState';
 import { useListQuery } from '../../hooks/useResource';
@@ -42,6 +43,8 @@ export default function AvoirsPage() {
           { key: 'dateCreation', header: 'Date', render: (r) => formatDateTime(r.dateCreation) },
           { key: 'factureNumero', header: 'Facture d\'origine' },
           { key: 'montant', header: 'Montant', render: (r) => `-${formatFCFA(r.montant)}` },
+          { key: 'soldeRestant', header: 'Solde restant', render: (r) => formatFCFA(r.soldeRestant) },
+          { key: 'statut', header: 'Statut', render: (r) => <StatusBadge status={r.statut} /> },
           { key: 'motif', header: 'Motif' },
           { key: 'modeRemboursement', header: 'Remboursement' },
           { key: 'auteurNom', header: 'Émis par' },
@@ -98,6 +101,7 @@ export default function AvoirsPage() {
             <hr className="my-2 border-dashed" />
             <p>Motif : {detail.motif}{detail.motifDetail ? ` — ${detail.motifDetail}` : ''}</p>
             <p>Remboursement : {detail.modeRemboursement}</p>
+            <p>Solde restant : {formatFCFA(detail.soldeRestant)} ({detail.statut === 'DISPONIBLE' ? 'disponible' : 'utilisé'})</p>
           </div>
         )}
       </Modal>

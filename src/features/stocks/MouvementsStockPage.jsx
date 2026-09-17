@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Minus } from 'lucide-react';
+import { Plus, Minus, QrCode } from 'lucide-react';
 import api, { apiErrorMessage } from '../../lib/api';
 import DataTable from '../../components/ui/DataTable';
 import Modal from '../../components/ui/Modal';
+import QrScannerModal from '../../components/ui/QrScannerModal';
 import PageHeader from '../../components/ui/PageHeader';
 import { Field, Select } from '../../components/ui/Field';
 import { useTableState } from '../../hooks/useTableState';
@@ -57,6 +58,29 @@ export default function MouvementsStockPage() {
   const [sortieOpen, setSortieOpen] = useState(false);
   const [entreeForm, setEntreeForm] = useState(EMPTY_ENTREE);
   const [sortieForm, setSortieForm] = useState(EMPTY_SORTIE);
+  const [scannerCible, setScannerCible] = useState(null); // 'ENTREE' | 'SORTIE' | null
+
+  // Recommandations et corrections.md §6/7 : associe le produit scanné au bon formulaire, à
+  // condition qu'il soit bien suivi en stock (sinon absent du menu déroulant lui-même).
+  async function traiterScan(texteDecode) {
+    const cible = scannerCible;
+    setScannerCible(null);
+    try {
+      const { data: produit } = await api.get('/produits/scanner', { params: { code: texteDecode } });
+      if (String(produit.etablissementId) !== String(produitsEtablissementId)) {
+        toast.error(`Ce produit appartient à un autre établissement (${produit.etablissementNom}).`);
+        return;
+      }
+      if (!produit.suiviStock) {
+        toast.error(`${produit.nom} n'a pas de suivi de stock activé.`);
+        return;
+      }
+      if (cible === 'ENTREE') setEntreeForm((f) => ({ ...f, produitId: String(produit.id) }));
+      else if (cible === 'SORTIE') setSortieForm((f) => ({ ...f, produitId: String(produit.id) }));
+    } catch (e) {
+      toast.error(apiErrorMessage(e, 'QR code non reconnu.'));
+    }
+  }
 
   const entree = useMutation({
     mutationFn: (payload) => api.post('/mouvements-stock/entrees', payload).then((r) => r.data),
@@ -162,10 +186,13 @@ export default function MouvementsStockPage() {
       >
         <form onSubmit={submitEntree}>
           <Field label="Produit" required>
-            <Select value={entreeForm.produitId} onChange={(e) => setEntreeForm((f) => ({ ...f, produitId: e.target.value }))}>
-              <option value="" disabled>Choisir un produit</option>
-              {(produits || []).map((p) => <option key={p.id} value={p.id}>{p.nom} (stock : {p.quantiteStock})</option>)}
-            </Select>
+            <div className="flex gap-2">
+              <Select className="flex-1" value={entreeForm.produitId} onChange={(e) => setEntreeForm((f) => ({ ...f, produitId: e.target.value }))}>
+                <option value="" disabled>Choisir un produit</option>
+                {(produits || []).map((p) => <option key={p.id} value={p.id}>{p.nom} (stock : {p.quantiteStock})</option>)}
+              </Select>
+              <button type="button" className="btn-secondary shrink-0" onClick={() => setScannerCible('ENTREE')}><QrCode size={15} /></button>
+            </div>
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Quantité" required><input type="number" min="0.001" step="0.001" className="input" value={entreeForm.quantite} onChange={(e) => setEntreeForm((f) => ({ ...f, quantite: e.target.value }))} required /></Field>
@@ -185,10 +212,13 @@ export default function MouvementsStockPage() {
       >
         <form onSubmit={submitSortie}>
           <Field label="Produit" required>
-            <Select value={sortieForm.produitId} onChange={(e) => setSortieForm((f) => ({ ...f, produitId: e.target.value }))}>
-              <option value="" disabled>Choisir un produit</option>
-              {(produits || []).map((p) => <option key={p.id} value={p.id}>{p.nom} (stock : {p.quantiteStock})</option>)}
-            </Select>
+            <div className="flex gap-2">
+              <Select className="flex-1" value={sortieForm.produitId} onChange={(e) => setSortieForm((f) => ({ ...f, produitId: e.target.value }))}>
+                <option value="" disabled>Choisir un produit</option>
+                {(produits || []).map((p) => <option key={p.id} value={p.id}>{p.nom} (stock : {p.quantiteStock})</option>)}
+              </Select>
+              <button type="button" className="btn-secondary shrink-0" onClick={() => setScannerCible('SORTIE')}><QrCode size={15} /></button>
+            </div>
           </Field>
           <Field label="Quantité" required><input type="number" min="0.001" step="0.001" className="input" value={sortieForm.quantite} onChange={(e) => setSortieForm((f) => ({ ...f, quantite: e.target.value }))} required /></Field>
           <Field label="Motif" required hint="Obligatoire pour toute sortie manuelle (RG-081).">
@@ -196,6 +226,8 @@ export default function MouvementsStockPage() {
           </Field>
         </form>
       </Modal>
+
+      <QrScannerModal open={!!scannerCible} onClose={() => setScannerCible(null)} onScan={traiterScan} title="Scanner un produit" />
     </div>
   );
 }

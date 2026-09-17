@@ -20,6 +20,14 @@ const STATUTS_INITIAUX = [
 ];
 const ZONES = ['Terrasse', 'Salle climatisée', 'VIP'];
 
+// Recommandations et corrections.md §1 : la liste des tables doit être organisée en trois
+// catégories distinctes (libres/occupées/réservées) plutôt qu'une simple grille colorée.
+const CATEGORIES = [
+  { key: 'LIBRE', label: 'Tables libres', match: (t) => t.statut === 'LIBRE' },
+  { key: 'OCCUPEE', label: 'Tables occupées', match: (t) => t.statut === 'OCCUPEE' || t.statut === 'EN_ATTENTE_PAIEMENT' },
+  { key: 'RESERVEE', label: 'Tables réservées', match: (t) => t.statut === 'RESERVEE' },
+];
+
 // mm:ss tant que l'occupation dure moins d'une heure, h:mm au-delà (Table.png fourni par le client).
 function formatEcoule(depuis) {
   const totalSec = Math.max(0, Math.floor((Date.now() - new Date(depuis).getTime()) / 1000));
@@ -52,11 +60,11 @@ function TableCard({ table, onClick }) {
   );
 }
 
-/** Plan de salle (Table.png fourni par le client) : grille de cartes colorées plutôt que le
- * glisser-déposer prévu dans l'amendement — même objectif (voir l'état d'un coup d'œil), plus
- * simple à utiliser au comptoir et à développer. Blanc = libre, bleu = réservée (client attendu,
- * pas encore là), rouge = occupée (clients physiquement à table, y compris en attente de
- * paiement). */
+/** Plan de salle (Table.png fourni par le client) : cartes colorées regroupées en trois
+ * catégories distinctes (Recommandations et corrections.md §1) plutôt que le glisser-déposer
+ * prévu dans l'amendement — même objectif (voir l'état d'un coup d'œil), plus simple à utiliser
+ * au comptoir et à développer. Blanc = libre, bleu = réservée (client attendu, pas encore là),
+ * rouge = occupée (clients physiquement à table, y compris en attente de paiement). */
 export default function TablesPage() {
   const toast = useToast();
   const navigate = useNavigate();
@@ -179,10 +187,24 @@ export default function TablesPage() {
         {groupesParEtablissement.map(([nom, liste]) => (
           <div key={nom}>
             {afficherEntetes && <p className="section-title mb-2">{nom}</p>}
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-              {liste.map((t) => (
-                <TableCard key={t.id} table={t} onClick={() => setActionTarget(t)} />
-              ))}
+            <div className="flex flex-col gap-4">
+              {CATEGORIES.map((cat) => {
+                const items = liste.filter(cat.match);
+                return (
+                  <div key={cat.key}>
+                    <p className="text-xs font-semibold uppercase text-ink-light mb-2">{cat.label} ({items.length})</p>
+                    {items.length === 0 ? (
+                      <p className="text-sm text-ink-light/60 italic">Aucune table dans cette catégorie.</p>
+                    ) : (
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                        {items.map((t) => (
+                          <TableCard key={t.id} table={t} onClick={() => setActionTarget(t)} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         ))}

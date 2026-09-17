@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Power, History } from 'lucide-react';
-import api, { apiErrorMessage } from '../../lib/api';
+import { Plus, Pencil, Power, History, QrCode, Download, Printer } from 'lucide-react';
+import api, { apiErrorMessage, fetchAuthenticatedBlobUrl } from '../../lib/api';
+import { downloadExport } from '../../lib/download';
 import DataTable from '../../components/ui/DataTable';
 import Modal from '../../components/ui/Modal';
 import PageHeader from '../../components/ui/PageHeader';
@@ -39,6 +40,31 @@ export default function ProduitsPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [historyTarget, setHistoryTarget] = useState(null);
+  const [qrTarget, setQrTarget] = useState(null);
+  const [qrBlobUrl, setQrBlobUrl] = useState(null);
+
+  // Recommandations et corrections.md §5 : le QR code est authentifié (JWT), donc récupéré en
+  // blob comme les autres exports (§api.js) plutôt qu'affiché via un simple <img src="...">.
+  useEffect(() => {
+    if (!qrTarget) { setQrBlobUrl(null); return undefined; }
+    let url;
+    fetchAuthenticatedBlobUrl(`/produits/${qrTarget.id}/qrcode.png`)
+      .then((u) => { url = u; setQrBlobUrl(u); })
+      .catch((e) => toast.error(apiErrorMessage(e)));
+    return () => { if (url) URL.revokeObjectURL(url); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qrTarget]);
+
+  function imprimerQrCode() {
+    const fenetre = window.open('', '_blank', 'width=400,height=500');
+    if (!fenetre) return;
+    fenetre.document.write(`<html><head><title>QR — ${qrTarget?.nom || ''}</title></head>
+      <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;">
+        <img src="${qrBlobUrl}" style="width:280px;height:280px;" onload="window.print()" />
+        <p style="margin-top:12px;">${qrTarget?.nom || ''}</p>
+      </body></html>`);
+    fenetre.document.close();
+  }
 
   const categorieEtablissementId = superAdmin ? form.etablissementId : user?.etablissementId;
   const { data: categories } = useQuery({
@@ -133,6 +159,7 @@ export default function ProduitsPage() {
           <>
             <button className="btn-ghost p-1.5" title="Modifier" onClick={() => openEdit(row)}><Pencil size={15} /></button>
             <button className="btn-ghost p-1.5" title="Historique des prix" onClick={() => setHistoryTarget(row)}><History size={15} /></button>
+            <button className="btn-ghost p-1.5" title="QR code" onClick={() => setQrTarget(row)}><QrCode size={15} /></button>
             <button className={`btn-ghost p-1.5 ${row.actif ? 'text-danger' : 'text-success'}`} title={row.actif ? 'Désactiver' : 'Activer'} onClick={() => toggleActif.mutate(row.id)}>
               <Power size={15} />
             </button>
@@ -198,6 +225,28 @@ export default function ProduitsPage() {
             </div>
           )}
         </form>
+      </Modal>
+
+      <Modal
+        open={!!qrTarget}
+        onClose={() => setQrTarget(null)}
+        title={`QR code — ${qrTarget?.nom || ''}`}
+        footer={<>
+          <button className="btn-secondary" onClick={() => setQrTarget(null)}>Fermer</button>
+          <button
+            className="btn-secondary"
+            disabled={!qrBlobUrl}
+            onClick={() => downloadExport(`/produits/${qrTarget.id}/qrcode.png`, {}, `qr-${qrTarget.nom}.png`).catch((e) => toast.error(apiErrorMessage(e)))}
+          >
+            <Download size={15} /> Télécharger
+          </button>
+          <button className="btn-primary" disabled={!qrBlobUrl} onClick={imprimerQrCode}><Printer size={15} /> Imprimer</button>
+        </>}
+      >
+        <div className="flex flex-col items-center gap-3">
+          {qrBlobUrl ? <img src={qrBlobUrl} alt={`QR code ${qrTarget?.nom}`} className="w-64 h-64" /> : <p className="text-sm text-ink-light">Génération...</p>}
+          <p className="text-sm text-ink-light">À scanner depuis Nouvelle commande, Nouvelle entrée ou Nouvelle sortie.</p>
+        </div>
       </Modal>
 
       <Modal open={!!historyTarget} onClose={() => setHistoryTarget(null)} title={`Historique des prix — ${historyTarget?.nom || ''}`}>

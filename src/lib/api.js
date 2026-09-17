@@ -92,6 +92,14 @@ export async function openAuthenticatedFile(path) {
   }
 }
 
+// Same auth-header problem as openAuthenticatedFile, but for inline display (<img src={...}>)
+// rather than opening a new tab — used for the per-product QR code (Recommandations et
+// corrections.md §5). Caller is responsible for revoking the URL (URL.revokeObjectURL) once done.
+export async function fetchAuthenticatedBlobUrl(path) {
+  const response = await api.get(path, { responseType: 'blob' });
+  return window.URL.createObjectURL(response.data);
+}
+
 // Turns a relative path returned by the backend for an uploaded file (e.g. "/uploads/logos/xxx.png",
 // served by Spring itself, not by the Vite dev server) into an absolute URL pointing at the API host.
 // Without this, an <img src> or <a href> built directly from that path resolves against the

@@ -32,6 +32,8 @@ const STATUS_COLOR = {
   SERVI: 'gray',
   // Avoir
   VALIDE: 'green',
+  DISPONIBLE: 'green',
+  UTILISE: 'gray',
   // Stock docs
   BROUILLON: 'orange',
   // Depense
@@ -70,6 +72,8 @@ const STATUS_LABEL = {
   SERVI: 'Servi',
   VALIDE: 'Validé',
   VALIDEE: 'Validée',
+  DISPONIBLE: 'Disponible',
+  UTILISE: 'Utilisé',
   BROUILLON: 'Brouillon',
   EN_COMPTAGE: 'En comptage',
   CLOTURE: 'Clôturé',
