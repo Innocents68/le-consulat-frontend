@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Power, History, QrCode, Download, Printer } from 'lucide-react';
 import api, { apiErrorMessage, fetchAuthenticatedBlobUrl } from '../../lib/api';
@@ -22,9 +23,16 @@ export default function ProduitsPage() {
   const user = useAuthStore((s) => s.user);
   const superAdmin = isSuperAdmin(user);
 
-  // Préremplissage depuis un raccourci du menu (?etablissementId=X).
-  const etablissementIdInitial = new URLSearchParams(window.location.search).get('etablissementId') || '';
-  const table = useTableState({ initialSize: 10, extraFilters: { etablissementId: etablissementIdInitial } });
+  const location = useLocation();
+  const table = useTableState({ initialSize: 10, extraFilters: { etablissementId: '' } });
+  // Un raccourci du menu (Restaurant/Cave à vin/Maquis) pointe vers cette même route en ne changeant
+  // que ?etablissementId=X — React Router ne redémarre pas le composant dans ce cas, donc il faut
+  // resynchroniser le filtre à chaque changement d'URL, pas seulement le lire une fois au montage.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    table.setFilters({ etablissementId: params.get('etablissementId') || '' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
   const { data, isLoading, isError, error, refetch } = useListQuery('produits', table.params);
   const { data: etablissements } = useQuery({ queryKey: ['etablissements'], queryFn: async () => (await api.get('/etablissements')).data });
 

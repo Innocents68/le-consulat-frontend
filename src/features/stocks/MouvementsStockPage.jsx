@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Minus, QrCode, Pencil, Power } from 'lucide-react';
 import api, { apiErrorMessage } from '../../lib/api';
@@ -25,41 +26,48 @@ const TYPE_LABEL = {
   AJUSTEMENT_INVENTAIRE: 'Ajustement inventaire',
 };
 
-const EMPTY_ENTREE = { produitId: '', quantite: '', prixUnitaire: '' };
 const EMPTY_SORTIE = { produitId: '', quantite: '', motif: '' };
 
-/** §6.6.2 : historique des mouvements + saisie manuelle d'entrées/sorties. Les mouvements
- * SORTIE_VENTE/RETOUR_AVOIR/TRANSFERT_* sont générés automatiquement ailleurs (RG-031/RG-062/RG-084)
- * et n'apparaissent ici qu'en lecture. */
+/** §6.6.2 : historique des mouvements, "Stock actuel" (RUD produit) et sortie manuelle. Les
+ * mouvements SORTIE_VENTE/RETOUR_AVOIR/TRANSFERT_* sont générés automatiquement ailleurs
+ * (RG-031/RG-062/RG-084) et n'apparaissent ici qu'en lecture.
+ * Retour utilisateur (2026-09-18) : augmenter le stock d'un produit EXISTANT se fait désormais
+ * via "Modifier" (ProduitFormModal, champ "Quantité à ajouter") plutôt que via "Nouvelle entrée" —
+ * ce bouton ouvre maintenant la création d'un nouveau produit. Réduire reste exclusivement via
+ * "Nouvelle sortie" (motif obligatoire, RG-081). */
 export default function MouvementsStockPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const superAdmin = isSuperAdmin(user);
+  const location = useLocation();
 
-  // Préremplissage depuis un raccourci du menu (?etablissementId=X&type=ENTREE|SORTIE).
-  const paramsUrl = new URLSearchParams(window.location.search);
-  const table = useTableState({ initialSize: 10, extraFilters: {
-    etablissementId: paramsUrl.get('etablissementId') || '', produitId: '', type: paramsUrl.get('type') || '',
-  } });
+  const table = useTableState({ initialSize: 10, extraFilters: { etablissementId: '', produitId: '', type: '' } });
+  // Un raccourci du menu (Stock Restaurant/Cave à vin/Maquis) pointe vers cette même route en ne
+  // changeant que le paramètre d'URL — React Router ne redémarre pas le composant dans ce cas, donc
+  // relire l'URL uniquement à l'état initial (comme avant) laissait la page bloquée sur le premier
+  // établissement visité : passer d'un lien à l'autre ne faisait plus rien.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    table.setFilters({ etablissementId: params.get('etablissementId') || '', type: params.get('type') || '' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
+
   const { data, isLoading, isError, error, refetch } = useListQuery('mouvements-stock', table.params);
   const { data: etablissements } = useQuery({ queryKey: ['etablissements'], queryFn: async () => (await api.get('/etablissements')).data });
 
-  const [entreeOpen, setEntreeOpen] = useState(false);
   const [sortieOpen, setSortieOpen] = useState(false);
-  const [entreeForm, setEntreeForm] = useState(EMPTY_ENTREE);
   const [sortieForm, setSortieForm] = useState(EMPTY_SORTIE);
-  const [scannerCible, setScannerCible] = useState(null); // 'ENTREE' | 'SORTIE' | null
-  // Établissement choisi DANS la modale (Super Admin) — indépendant du filtre de la liste
-  // ci-dessous, pour que "Nouvelle entrée/sortie" reste utilisable sans avoir dû filtrer la page
-  // au préalable (source de confusion : Recommandations et corrections.md).
+  const [scannerOuvert, setScannerOuvert] = useState(false);
+  // Établissement choisi DANS la modale de sortie (Super Admin) — indépendant du filtre de la
+  // liste ci-dessous, pour rester utilisable sans avoir dû filtrer la page au préalable.
   const [formEtablissementId, setFormEtablissementId] = useState('');
   const [rechercheProduit, setRechercheProduit] = useState('');
 
   const etablissementIdActif = superAdmin ? formEtablissementId : user?.etablissementId;
   // Clé préfixée par 'produits' (et non 'produits-suivis') pour que
-  // queryClient.invalidateQueries({ queryKey: ['produits'] }), appelé après chaque entrée/sortie,
-  // la rafraîchisse elle aussi — sinon le stock affiché ici restait périmé jusqu'à un F5.
+  // queryClient.invalidateQueries({ queryKey: ['produits'] }), appelé après chaque sortie/entrée,
+  // la rafraîchisse elle aussi — sinon le stock affiché restait périmé jusqu'à un F5.
   const { data: produits } = useQuery({
     queryKey: ['produits', 'suivis', etablissementIdActif],
     queryFn: async () => {
@@ -71,7 +79,7 @@ export default function MouvementsStockPage() {
 
   // Liste visible sur la page (pas seulement dans les modales), paginée et avec RUD : suit le
   // filtre établissement de la liste des mouvements ci-dessous, se rafraîchit automatiquement
-  // après chaque ajout (clé 'produits' partagée avec les invalidations des mutations entrée/sortie).
+  // après chaque mouvement.
   const stockEtablissementId = superAdmin ? table.filters.etablissementId : user?.etablissementId;
   const stockTable = useTableState({ initialSize: 10, extraFilters: { suiviStock: true } });
   useEffect(() => { stockTable.setPage(0); }, [stockEtablissementId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -87,18 +95,14 @@ export default function MouvementsStockPage() {
     onError: (e) => toast.error(apiErrorMessage(e)),
   });
 
+  function ouvrirNouveauProduit() { setEditingProduit(null); setProduitFormOpen(true); }
+  function ouvrirModifierProduit(p) { setEditingProduit(p); setProduitFormOpen(true); }
+
   const produitsFiltres = (produits || []).filter((p) => p.nom.toLowerCase().includes(rechercheProduit.trim().toLowerCase()));
-  const produitSelectionneEntree = (produits || []).find((p) => String(p.id) === String(entreeForm.produitId));
   const produitSelectionneSortie = (produits || []).find((p) => String(p.id) === String(sortieForm.produitId));
   const sortieDepasseStock = produitSelectionneSortie && sortieForm.quantite
     && Number(sortieForm.quantite) > Number(produitSelectionneSortie.quantiteStock);
 
-  function openEntree() {
-    setFormEtablissementId(superAdmin ? (table.filters.etablissementId || '') : '');
-    setRechercheProduit('');
-    setEntreeForm(EMPTY_ENTREE);
-    setEntreeOpen(true);
-  }
   function openSortie() {
     setFormEtablissementId(superAdmin ? (table.filters.etablissementId || '') : '');
     setRechercheProduit('');
@@ -106,13 +110,11 @@ export default function MouvementsStockPage() {
     setSortieOpen(true);
   }
 
-  // Recommandations et corrections.md §6/7 : associe le produit scanné au bon formulaire, à
+  // Recommandations et corrections.md §6/7 : associe le produit scanné au formulaire de sortie, à
   // condition qu'il soit bien suivi en stock (sinon absent du menu déroulant lui-même). Pour un
-  // Super Admin, l'établissement du produit scanné est repris automatiquement — pas besoin de
-  // l'avoir choisi avant de scanner.
+  // Super Admin, l'établissement du produit scanné est repris automatiquement.
   async function traiterScan(texteDecode) {
-    const cible = scannerCible;
-    setScannerCible(null);
+    setScannerOuvert(false);
     try {
       const { data: produit } = await api.get('/produits/scanner', { params: { code: texteDecode } });
       if (!superAdmin && String(produit.etablissementId) !== String(user?.etablissementId)) {
@@ -124,24 +126,12 @@ export default function MouvementsStockPage() {
         return;
       }
       if (superAdmin) setFormEtablissementId(String(produit.etablissementId));
-      if (cible === 'ENTREE') setEntreeForm((f) => ({ ...f, produitId: String(produit.id) }));
-      else if (cible === 'SORTIE') setSortieForm((f) => ({ ...f, produitId: String(produit.id) }));
+      setSortieForm((f) => ({ ...f, produitId: String(produit.id) }));
     } catch (e) {
       toast.error(apiErrorMessage(e, 'QR code non reconnu.'));
     }
   }
 
-  const entree = useMutation({
-    mutationFn: (payload) => api.post('/mouvements-stock/entrees', payload).then((r) => r.data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['mouvements-stock'] });
-      queryClient.invalidateQueries({ queryKey: ['produits'] });
-      toast.success('Entrée de stock enregistrée.');
-      setEntreeOpen(false);
-      setEntreeForm(EMPTY_ENTREE);
-    },
-    onError: (e) => toast.error(apiErrorMessage(e)),
-  });
   const sortie = useMutation({
     mutationFn: (payload) => api.post('/mouvements-stock/sorties', payload).then((r) => r.data),
     onSuccess: () => {
@@ -154,14 +144,6 @@ export default function MouvementsStockPage() {
     onError: (e) => toast.error(apiErrorMessage(e)),
   });
 
-  function submitEntree(e) {
-    e.preventDefault();
-    entree.mutate({
-      produitId: Number(entreeForm.produitId),
-      quantite: Number(entreeForm.quantite),
-      prixUnitaire: entreeForm.prixUnitaire ? Number(entreeForm.prixUnitaire) : null,
-    });
-  }
   function submitSortie(e) {
     e.preventDefault();
     sortie.mutate({
@@ -178,7 +160,7 @@ export default function MouvementsStockPage() {
         subtitle="Historique des entrées, sorties et transferts (§6.6.2)."
         actions={<>
           <button className="btn-secondary" onClick={openSortie}><Minus size={16} /> Nouvelle sortie</button>
-          <button className="btn-primary" onClick={openEntree}><Plus size={16} /> Nouvelle entrée</button>
+          <button className="btn-primary" onClick={ouvrirNouveauProduit}><Plus size={16} /> Nouvelle entrée</button>
         </>}
       />
 
@@ -217,7 +199,7 @@ export default function MouvementsStockPage() {
             onPageChange={stockTable.setPage}
             rowActions={(row) => (
               <>
-                <button className="btn-ghost p-1.5" title="Modifier" onClick={() => { setEditingProduit(row); setProduitFormOpen(true); }}><Pencil size={15} /></button>
+                <button className="btn-ghost p-1.5" title="Modifier (permet aussi d'augmenter le stock)" onClick={() => ouvrirModifierProduit(row)}><Pencil size={15} /></button>
                 <button
                   className={`btn-ghost p-1.5 ${row.actif ? 'text-danger' : 'text-success'}`}
                   title={row.actif ? 'Désactiver' : 'Activer'}
@@ -276,70 +258,6 @@ export default function MouvementsStockPage() {
       />
 
       <Modal
-        open={entreeOpen}
-        onClose={() => setEntreeOpen(false)}
-        title="Nouvelle entrée de stock"
-        footer={<>
-          <button className="btn-secondary" onClick={() => setEntreeOpen(false)}>Annuler</button>
-          <button className="btn-primary" onClick={submitEntree} disabled={entree.isPending}>Enregistrer</button>
-        </>}
-      >
-        <form onSubmit={submitEntree}>
-          {superAdmin && (
-            <Field label="Établissement" required>
-              <Select
-                value={formEtablissementId}
-                onChange={(e) => { setFormEtablissementId(e.target.value); setEntreeForm((f) => ({ ...f, produitId: '' })); setRechercheProduit(''); }}
-              >
-                <option value="" disabled>Choisir un établissement</option>
-                {(etablissements || []).map((et) => <option key={et.id} value={et.id}>{et.nom}</option>)}
-              </Select>
-            </Field>
-          )}
-          <Field label="Produit" required>
-            <div className="flex gap-2 mb-2">
-              <input
-                className="input flex-1"
-                placeholder={etablissementIdActif ? 'Rechercher un produit...' : 'Choisissez un établissement'}
-                value={rechercheProduit}
-                onChange={(e) => setRechercheProduit(e.target.value)}
-                disabled={!etablissementIdActif}
-              />
-              <button type="button" className="btn-secondary shrink-0" onClick={() => setScannerCible('ENTREE')}><QrCode size={15} /></button>
-            </div>
-            <Select
-              value={entreeForm.produitId}
-              onChange={(e) => setEntreeForm((f) => ({ ...f, produitId: e.target.value }))}
-              disabled={!etablissementIdActif}
-            >
-              <option value="" disabled>{etablissementIdActif ? 'Choisir un produit' : 'Choisissez d\'abord un établissement'}</option>
-              {produitsFiltres.map((p) => <option key={p.id} value={p.id}>{p.nom} (stock : {p.quantiteStock})</option>)}
-            </Select>
-          </Field>
-
-          {produitSelectionneEntree && (
-            <div className="rounded-lg bg-cream-100 dark:bg-white/5 p-3 mb-3 text-sm space-y-1">
-              <div className="flex justify-between">
-                <span>Stock actuellement disponible</span>
-                <span className="font-semibold">{produitSelectionneEntree.quantiteStock} {produitSelectionneEntree.unite}</span>
-              </div>
-              {entreeForm.quantite !== '' && (
-                <div className="flex justify-between text-success font-semibold">
-                  <span>Nouveau stock après entrée</span>
-                  <span>{Number(produitSelectionneEntree.quantiteStock) + Number(entreeForm.quantite)} {produitSelectionneEntree.unite}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Quantité à ajouter" required><input type="number" min="0.001" step="0.001" className="input" value={entreeForm.quantite} onChange={(e) => setEntreeForm((f) => ({ ...f, quantite: e.target.value }))} required /></Field>
-            <Field label="Prix d'achat unitaire (FCFA)"><input type="number" min="0" className="input" value={entreeForm.prixUnitaire} onChange={(e) => setEntreeForm((f) => ({ ...f, prixUnitaire: e.target.value }))} /></Field>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal
         open={sortieOpen}
         onClose={() => setSortieOpen(false)}
         title="Nouvelle sortie de stock"
@@ -369,7 +287,7 @@ export default function MouvementsStockPage() {
                 onChange={(e) => setRechercheProduit(e.target.value)}
                 disabled={!etablissementIdActif}
               />
-              <button type="button" className="btn-secondary shrink-0" onClick={() => setScannerCible('SORTIE')}><QrCode size={15} /></button>
+              <button type="button" className="btn-secondary shrink-0" onClick={() => setScannerOuvert(true)}><QrCode size={15} /></button>
             </div>
             <Select
               value={sortieForm.produitId}
@@ -404,9 +322,14 @@ export default function MouvementsStockPage() {
         </form>
       </Modal>
 
-      <QrScannerModal open={!!scannerCible} onClose={() => setScannerCible(null)} onScan={traiterScan} title="Scanner un produit" />
+      <QrScannerModal open={scannerOuvert} onClose={() => setScannerOuvert(false)} onScan={traiterScan} title="Scanner un produit" />
 
-      <ProduitFormModal open={produitFormOpen} onClose={() => setProduitFormOpen(false)} editing={editingProduit} />
+      <ProduitFormModal
+        open={produitFormOpen}
+        onClose={() => setProduitFormOpen(false)}
+        editing={editingProduit}
+        defaultEtablissementId={table.filters.etablissementId}
+      />
     </div>
   );
 }

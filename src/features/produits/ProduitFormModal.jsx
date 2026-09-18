@@ -14,9 +14,12 @@ const EMPTY = {
 };
 
 /** Création/modification d'un produit — extrait de ProduitsPage pour être réutilisé depuis
- * Mouvements de stock (RUD sur "Stock actuel"). Le stock (quantiteStock) reste toujours en
- * lecture seule ici : seul MouvementStockService peut le modifier (RG-062, Produit.java). */
-export default function ProduitFormModal({ open, onClose, editing }) {
+ * Mouvements de stock (RUD sur "Stock actuel"). Retour utilisateur (2026-09-18) : augmenter le
+ * stock d'un produit existant se fait ici, via "Quantité à ajouter" — ça reste une entrée de
+ * stock normale (POST /mouvements-stock/entrees, tracée dans l'historique), seulement déclenchée
+ * depuis ce formulaire plutôt que depuis "Nouvelle entrée". quantiteStock elle-même reste en
+ * lecture seule : seul MouvementStockService peut la modifier (RG-062, Produit.java). */
+export default function ProduitFormModal({ open, onClose, editing, defaultEtablissementId }) {
   const toast = useToast();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
@@ -24,9 +27,14 @@ export default function ProduitFormModal({ open, onClose, editing }) {
   const { data: etablissements } = useQuery({ queryKey: ['etablissements'], queryFn: async () => (await api.get('/etablissements')).data });
 
   const [form, setForm] = useState(EMPTY);
+  const [quantiteAjout, setQuantiteAjout] = useState('');
 
   useEffect(() => {
-    if (open) setForm(editing ? { ...editing, categorieId: editing.categorieId, etablissementId: editing.etablissementId } : EMPTY);
+    if (!open) return;
+    setQuantiteAjout('');
+    setForm(editing
+      ? { ...editing, categorieId: editing.categorieId, etablissementId: editing.etablissementId }
+      : { ...EMPTY, etablissementId: defaultEtablissementId || '' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editing]);
 
@@ -40,16 +48,16 @@ export default function ProduitFormModal({ open, onClose, editing }) {
 
   const create = useMutation({
     mutationFn: (payload) => api.post('/produits', payload).then((r) => r.data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['produits'] }); toast.success('Produit créé.'); onClose(); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['produits'] }); toast.success('Produit créé.'); },
     onError: (e) => toast.error(apiErrorMessage(e)),
   });
   const update = useMutation({
     mutationFn: ({ id, ...payload }) => api.put(`/produits/${id}`, payload).then((r) => r.data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['produits'] }); toast.success('Produit modifié.'); onClose(); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['produits'] }); toast.success('Produit modifié.'); },
     onError: (e) => toast.error(apiErrorMessage(e)),
   });
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     const payload = {
       ...form,
@@ -60,8 +68,31 @@ export default function ProduitFormModal({ open, onClose, editing }) {
       emplacement: form.emplacement || null,
       fournisseurId: form.fournisseurId ? Number(form.fournisseurId) : null,
     };
-    if (editing) update.mutate({ id: editing.id, ...payload });
-    else create.mutate(payload);
+
+    if (editing) {
+      try {
+        await update.mutateAsync({ id: editing.id, ...payload });
+      } catch {
+        return; // le toast d'erreur est déjà affiché par onError ci-dessus
+      }
+      if (quantiteAjout && Number(quantiteAjout) > 0) {
+        try {
+          await api.post('/mouvements-stock/entrees', { produitId: editing.id, quantite: Number(quantiteAjout) });
+          queryClient.invalidateQueries({ queryKey: ['mouvements-stock'] });
+          queryClient.invalidateQueries({ queryKey: ['produits'] });
+          toast.success(`Stock augmenté de ${quantiteAjout} ${form.unite}.`);
+        } catch (err) {
+          toast.error(apiErrorMessage(err, "Le produit a été modifié, mais l'ajout de stock a échoué."));
+        }
+      }
+    } else {
+      try {
+        await create.mutateAsync(payload);
+      } catch {
+        return;
+      }
+    }
+    onClose();
   }
 
   return (
@@ -118,7 +149,14 @@ export default function ProduitFormModal({ open, onClose, editing }) {
                 {(fournisseurs || []).map((f) => <option key={f.id} value={f.id}>{f.nom}</option>)}
               </Select>
             </Field>
-            {editing && <Field label="Stock actuel" hint="Modifiable uniquement via Mouvements de stock."><input className="input" value={editing.quantiteStock} disabled /></Field>}
+            {editing && (
+              <>
+                <Field label="Stock actuel"><input className="input" value={editing.quantiteStock} disabled /></Field>
+                <Field label="Quantité à ajouter" hint="Enregistre une entrée de stock tracée dans l'historique (§6.6.2).">
+                  <input type="number" min="0" step="0.001" className="input" value={quantiteAjout} onChange={(e) => setQuantiteAjout(e.target.value)} />
+                </Field>
+              </>
+            )}
           </div>
         )}
       </form>

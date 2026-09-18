@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Power, Trash2, Users, CalendarClock, ShoppingCart, X } from 'lucide-react';
 import api, { apiErrorMessage } from '../../lib/api';
@@ -68,11 +68,18 @@ function TableCard({ table, onClick }) {
 export default function TablesPage() {
   const toast = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const superAdmin = isSuperAdmin(user);
 
-  const [filterEtablissementId, setFilterEtablissementId] = useState(() => new URLSearchParams(window.location.search).get('etablissementId') || '');
+  const [filterEtablissementId, setFilterEtablissementId] = useState('');
+  // Un raccourci du menu (Restaurant/Cave à vin/Maquis) pointe vers cette même route en ne changeant
+  // que ?etablissementId=X — React Router ne redémarre pas le composant dans ce cas, donc il faut
+  // resynchroniser le filtre à chaque changement d'URL, pas seulement le lire une fois au montage.
+  useEffect(() => {
+    setFilterEtablissementId(new URLSearchParams(location.search).get('etablissementId') || '');
+  }, [location.search]);
   const { data: etablissements } = useQuery({ queryKey: ['etablissements'], queryFn: async () => (await api.get('/etablissements')).data });
   const { data: tables, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['tables', filterEtablissementId],
