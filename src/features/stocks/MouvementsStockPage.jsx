@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Minus, QrCode } from 'lucide-react';
+import { Plus, Minus, QrCode, Pencil, Power } from 'lucide-react';
 import api, { apiErrorMessage } from '../../lib/api';
 import DataTable from '../../components/ui/DataTable';
 import Modal from '../../components/ui/Modal';
 import QrScannerModal from '../../components/ui/QrScannerModal';
 import PageHeader from '../../components/ui/PageHeader';
 import { Field, Select } from '../../components/ui/Field';
+import ProduitFormModal from '../produits/ProduitFormModal';
 import { useTableState } from '../../hooks/useTableState';
 import { useListQuery } from '../../hooks/useResource';
 import { formatDateTime } from '../../lib/format';
@@ -56,14 +57,36 @@ export default function MouvementsStockPage() {
   const [rechercheProduit, setRechercheProduit] = useState('');
 
   const etablissementIdActif = superAdmin ? formEtablissementId : user?.etablissementId;
+  // Clé préfixée par 'produits' (et non 'produits-suivis') pour que
+  // queryClient.invalidateQueries({ queryKey: ['produits'] }), appelé après chaque entrée/sortie,
+  // la rafraîchisse elle aussi — sinon le stock affiché ici restait périmé jusqu'à un F5.
   const { data: produits } = useQuery({
-    queryKey: ['produits-suivis', etablissementIdActif],
+    queryKey: ['produits', 'suivis', etablissementIdActif],
     queryFn: async () => {
       const { data } = await api.get('/produits', { params: { etablissementId: etablissementIdActif, size: 200 } });
       return (data.content || []).filter((p) => p.suiviStock);
     },
     enabled: !!etablissementIdActif,
   });
+
+  // Liste visible sur la page (pas seulement dans les modales), paginée et avec RUD : suit le
+  // filtre établissement de la liste des mouvements ci-dessous, se rafraîchit automatiquement
+  // après chaque ajout (clé 'produits' partagée avec les invalidations des mutations entrée/sortie).
+  const stockEtablissementId = superAdmin ? table.filters.etablissementId : user?.etablissementId;
+  const stockTable = useTableState({ initialSize: 10, extraFilters: { suiviStock: true } });
+  useEffect(() => { stockTable.setPage(0); }, [stockEtablissementId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const {
+    data: stockData, isLoading: stockLoading, isError: stockIsError, error: stockError, refetch: stockRefetch,
+  } = useListQuery('produits', { ...stockTable.params, etablissementId: stockEtablissementId }, { enabled: !!stockEtablissementId });
+
+  const [editingProduit, setEditingProduit] = useState(null);
+  const [produitFormOpen, setProduitFormOpen] = useState(false);
+  const toggleActifProduit = useMutation({
+    mutationFn: (id) => api.patch(`/produits/${id}/statut`).then((r) => r.data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['produits'] }); toast.success('Statut mis à jour.'); },
+    onError: (e) => toast.error(apiErrorMessage(e)),
+  });
+
   const produitsFiltres = (produits || []).filter((p) => p.nom.toLowerCase().includes(rechercheProduit.trim().toLowerCase()));
   const produitSelectionneEntree = (produits || []).find((p) => String(p.id) === String(entreeForm.produitId));
   const produitSelectionneSortie = (produits || []).find((p) => String(p.id) === String(sortieForm.produitId));
@@ -159,6 +182,57 @@ export default function MouvementsStockPage() {
         </>}
       />
 
+      <p className="section-title mb-2">Stock actuel</p>
+      {!stockEtablissementId ? (
+        <p className="text-sm text-ink-light mb-6">Choisissez un établissement ci-dessous pour voir le stock actuel de ses produits.</p>
+      ) : (
+        <div className="mb-6">
+          <DataTable
+            columns={[
+              { key: 'nom', header: 'Produit' },
+              { key: 'categorieNom', header: 'Catégorie' },
+              {
+                key: 'quantiteStock',
+                header: 'Stock actuel',
+                render: (r) => (
+                  <span className={r.seuilAlerte != null && r.quantiteStock <= r.seuilAlerte ? 'text-danger font-bold' : ''}>
+                    {r.quantiteStock} {r.unite}
+                  </span>
+                ),
+              },
+              { key: 'seuilAlerte', header: 'Seuil d\'alerte', render: (r) => r.seuilAlerte ?? '—' },
+              { key: 'actif', header: 'Statut', render: (r) => r.actif ? 'Actif' : 'Désactivé' },
+            ]}
+            rows={stockData?.rows || []}
+            total={stockData?.total || 0}
+            totalPages={stockData?.totalPages || 0}
+            page={stockTable.page}
+            isLoading={stockLoading}
+            isError={stockIsError}
+            errorMessage={apiErrorMessage(stockError)}
+            onRetry={stockRefetch}
+            search={stockTable.search}
+            onSearchChange={stockTable.setSearch}
+            searchPlaceholder="Rechercher un produit..."
+            onPageChange={stockTable.setPage}
+            rowActions={(row) => (
+              <>
+                <button className="btn-ghost p-1.5" title="Modifier" onClick={() => { setEditingProduit(row); setProduitFormOpen(true); }}><Pencil size={15} /></button>
+                <button
+                  className={`btn-ghost p-1.5 ${row.actif ? 'text-danger' : 'text-success'}`}
+                  title={row.actif ? 'Désactiver' : 'Activer'}
+                  onClick={() => toggleActifProduit.mutate(row.id)}
+                >
+                  <Power size={15} />
+                </button>
+              </>
+            )}
+            emptyLabel="Aucun produit suivi en stock pour cet établissement."
+          />
+        </div>
+      )}
+
+      <p className="section-title mb-2">Historique des mouvements</p>
       <DataTable
         columns={[
           { key: 'dateMouvement', header: 'Date', render: (r) => formatDateTime(r.dateMouvement) },
@@ -331,6 +405,8 @@ export default function MouvementsStockPage() {
       </Modal>
 
       <QrScannerModal open={!!scannerCible} onClose={() => setScannerCible(null)} onScan={traiterScan} title="Scanner un produit" />
+
+      <ProduitFormModal open={produitFormOpen} onClose={() => setProduitFormOpen(false)} editing={editingProduit} />
     </div>
   );
 }

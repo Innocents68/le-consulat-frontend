@@ -1,7 +1,7 @@
 import {
   Users, ScrollText, Package, UtensilsCrossed, ShoppingCart, Receipt, ChefHat, Gift, Undo2, Truck,
   ArrowLeftRight, PackageSearch, ClipboardList, Wallet, Tags, LineChart, BarChart3, TrendingUp,
-  Banknote, Boxes, PiggyBank, Settings, LifeBuoy, DatabaseBackup, Home, Wine, ArrowDownToLine, ArrowUpFromLine,
+  Banknote, Boxes, PiggyBank, Settings, LifeBuoy, DatabaseBackup, Home, Wine,
 } from 'lucide-react';
 
 // Arborescence imposée par menu_maquis_restaurant_cave.md (fourni par le client), dans son ordre
@@ -10,9 +10,11 @@ import {
 // précédente. Un groupe/item porteur de `etablissementNom` ne s'affiche, pour un Gérant/Caissier,
 // que si `user.etablissementNom` correspond — le Super Administrateur voit tout (Sidebar.jsx).
 // « Performance des caisses » (Reporting) reste absent : aucune page ne existe encore (nécessite
-// une session de caisse non construite, cf. Lot 5c). Les items « Stock X > Entrées/Sorties »
-// sont des raccourcis pré-filtrés vers la page unique Mouvements de stock (Sidebar ne gère que 2
-// niveaux de menu, pas 3) plutôt que des pages dédiées par établissement.
+// une session de caisse non construite, cf. Lot 5c). Les items « Stock X » sont des raccourcis
+// pré-filtrés par établissement vers la page unique Mouvements de stock (Sidebar ne gère que 2
+// niveaux de menu, pas 3) — les boutons Nouvelle entrée/Nouvelle sortie de cette page couvrent les
+// deux sens, un seul raccourci de menu par établissement suffit (un précédent découpage
+// Entrées/Sorties séparé faisait doublon avec ces deux boutons).
 export const NAV_GROUPS = [
   { id: 'tableau-de-bord', label: 'Tableau de bord', icon: Home, to: '/tableau-de-bord' },
   {
@@ -49,12 +51,9 @@ export const NAV_GROUPS = [
   {
     id: 'stocks', label: 'Stocks / Inventaire', icon: PackageSearch, items: [
       { label: 'Fournisseurs', icon: Truck, to: '/fournisseurs' },
-      { label: 'Stock Restaurant — Entrées', icon: ArrowDownToLine, to: '/mouvements-stock?etablissementId=2&type=ENTREE', etablissementNom: 'Restaurant' },
-      { label: 'Stock Restaurant — Sorties', icon: ArrowUpFromLine, to: '/mouvements-stock?etablissementId=2&type=SORTIE', etablissementNom: 'Restaurant' },
-      { label: 'Stock Cave à vin — Entrées', icon: ArrowDownToLine, to: '/mouvements-stock?etablissementId=3&type=ENTREE', etablissementNom: 'Cave à vin' },
-      { label: 'Stock Cave à vin — Sorties', icon: ArrowUpFromLine, to: '/mouvements-stock?etablissementId=3&type=SORTIE', etablissementNom: 'Cave à vin' },
-      { label: 'Stock Maquis — Entrées', icon: ArrowDownToLine, to: '/mouvements-stock?etablissementId=1&type=ENTREE', etablissementNom: 'Maquis' },
-      { label: 'Stock Maquis — Sorties', icon: ArrowUpFromLine, to: '/mouvements-stock?etablissementId=1&type=SORTIE', etablissementNom: 'Maquis' },
+      { label: 'Stock Restaurant', icon: Boxes, to: '/mouvements-stock?etablissementId=2', etablissementNom: 'Restaurant' },
+      { label: 'Stock Cave à vin', icon: Boxes, to: '/mouvements-stock?etablissementId=3', etablissementNom: 'Cave à vin' },
+      { label: 'Stock Maquis', icon: Boxes, to: '/mouvements-stock?etablissementId=1', etablissementNom: 'Maquis' },
       { label: 'Inventaires', icon: ClipboardList, to: '/inventaires' },
       { label: 'Transferts', icon: ArrowLeftRight, to: '/transferts', superAdminOnly: true },
     ],
