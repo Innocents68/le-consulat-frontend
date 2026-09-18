@@ -44,30 +44,55 @@ export default function MouvementsStockPage() {
   const { data, isLoading, isError, error, refetch } = useListQuery('mouvements-stock', table.params);
   const { data: etablissements } = useQuery({ queryKey: ['etablissements'], queryFn: async () => (await api.get('/etablissements')).data });
 
-  const produitsEtablissementId = superAdmin ? table.filters.etablissementId : user?.etablissementId;
-  const { data: produits } = useQuery({
-    queryKey: ['produits-suivis', produitsEtablissementId],
-    queryFn: async () => {
-      const { data } = await api.get('/produits', { params: { etablissementId: produitsEtablissementId, size: 200 } });
-      return (data.content || []).filter((p) => p.suiviStock);
-    },
-    enabled: !!produitsEtablissementId,
-  });
-
   const [entreeOpen, setEntreeOpen] = useState(false);
   const [sortieOpen, setSortieOpen] = useState(false);
   const [entreeForm, setEntreeForm] = useState(EMPTY_ENTREE);
   const [sortieForm, setSortieForm] = useState(EMPTY_SORTIE);
   const [scannerCible, setScannerCible] = useState(null); // 'ENTREE' | 'SORTIE' | null
+  // Établissement choisi DANS la modale (Super Admin) — indépendant du filtre de la liste
+  // ci-dessous, pour que "Nouvelle entrée/sortie" reste utilisable sans avoir dû filtrer la page
+  // au préalable (source de confusion : Recommandations et corrections.md).
+  const [formEtablissementId, setFormEtablissementId] = useState('');
+  const [rechercheProduit, setRechercheProduit] = useState('');
+
+  const etablissementIdActif = superAdmin ? formEtablissementId : user?.etablissementId;
+  const { data: produits } = useQuery({
+    queryKey: ['produits-suivis', etablissementIdActif],
+    queryFn: async () => {
+      const { data } = await api.get('/produits', { params: { etablissementId: etablissementIdActif, size: 200 } });
+      return (data.content || []).filter((p) => p.suiviStock);
+    },
+    enabled: !!etablissementIdActif,
+  });
+  const produitsFiltres = (produits || []).filter((p) => p.nom.toLowerCase().includes(rechercheProduit.trim().toLowerCase()));
+  const produitSelectionneEntree = (produits || []).find((p) => String(p.id) === String(entreeForm.produitId));
+  const produitSelectionneSortie = (produits || []).find((p) => String(p.id) === String(sortieForm.produitId));
+  const sortieDepasseStock = produitSelectionneSortie && sortieForm.quantite
+    && Number(sortieForm.quantite) > Number(produitSelectionneSortie.quantiteStock);
+
+  function openEntree() {
+    setFormEtablissementId(superAdmin ? (table.filters.etablissementId || '') : '');
+    setRechercheProduit('');
+    setEntreeForm(EMPTY_ENTREE);
+    setEntreeOpen(true);
+  }
+  function openSortie() {
+    setFormEtablissementId(superAdmin ? (table.filters.etablissementId || '') : '');
+    setRechercheProduit('');
+    setSortieForm(EMPTY_SORTIE);
+    setSortieOpen(true);
+  }
 
   // Recommandations et corrections.md §6/7 : associe le produit scanné au bon formulaire, à
-  // condition qu'il soit bien suivi en stock (sinon absent du menu déroulant lui-même).
+  // condition qu'il soit bien suivi en stock (sinon absent du menu déroulant lui-même). Pour un
+  // Super Admin, l'établissement du produit scanné est repris automatiquement — pas besoin de
+  // l'avoir choisi avant de scanner.
   async function traiterScan(texteDecode) {
     const cible = scannerCible;
     setScannerCible(null);
     try {
       const { data: produit } = await api.get('/produits/scanner', { params: { code: texteDecode } });
-      if (String(produit.etablissementId) !== String(produitsEtablissementId)) {
+      if (!superAdmin && String(produit.etablissementId) !== String(user?.etablissementId)) {
         toast.error(`Ce produit appartient à un autre établissement (${produit.etablissementNom}).`);
         return;
       }
@@ -75,6 +100,7 @@ export default function MouvementsStockPage() {
         toast.error(`${produit.nom} n'a pas de suivi de stock activé.`);
         return;
       }
+      if (superAdmin) setFormEtablissementId(String(produit.etablissementId));
       if (cible === 'ENTREE') setEntreeForm((f) => ({ ...f, produitId: String(produit.id) }));
       else if (cible === 'SORTIE') setSortieForm((f) => ({ ...f, produitId: String(produit.id) }));
     } catch (e) {
@@ -128,8 +154,8 @@ export default function MouvementsStockPage() {
         title="Mouvements de stock"
         subtitle="Historique des entrées, sorties et transferts (§6.6.2)."
         actions={<>
-          <button className="btn-secondary" onClick={() => setSortieOpen(true)}><Minus size={16} /> Nouvelle sortie</button>
-          <button className="btn-primary" onClick={() => setEntreeOpen(true)}><Plus size={16} /> Nouvelle entrée</button>
+          <button className="btn-secondary" onClick={openSortie}><Minus size={16} /> Nouvelle sortie</button>
+          <button className="btn-primary" onClick={openEntree}><Plus size={16} /> Nouvelle entrée</button>
         </>}
       />
 
@@ -185,17 +211,55 @@ export default function MouvementsStockPage() {
         </>}
       >
         <form onSubmit={submitEntree}>
-          <Field label="Produit" required>
-            <div className="flex gap-2">
-              <Select className="flex-1" value={entreeForm.produitId} onChange={(e) => setEntreeForm((f) => ({ ...f, produitId: e.target.value }))}>
-                <option value="" disabled>Choisir un produit</option>
-                {(produits || []).map((p) => <option key={p.id} value={p.id}>{p.nom} (stock : {p.quantiteStock})</option>)}
+          {superAdmin && (
+            <Field label="Établissement" required>
+              <Select
+                value={formEtablissementId}
+                onChange={(e) => { setFormEtablissementId(e.target.value); setEntreeForm((f) => ({ ...f, produitId: '' })); setRechercheProduit(''); }}
+              >
+                <option value="" disabled>Choisir un établissement</option>
+                {(etablissements || []).map((et) => <option key={et.id} value={et.id}>{et.nom}</option>)}
               </Select>
+            </Field>
+          )}
+          <Field label="Produit" required>
+            <div className="flex gap-2 mb-2">
+              <input
+                className="input flex-1"
+                placeholder={etablissementIdActif ? 'Rechercher un produit...' : 'Choisissez un établissement'}
+                value={rechercheProduit}
+                onChange={(e) => setRechercheProduit(e.target.value)}
+                disabled={!etablissementIdActif}
+              />
               <button type="button" className="btn-secondary shrink-0" onClick={() => setScannerCible('ENTREE')}><QrCode size={15} /></button>
             </div>
+            <Select
+              value={entreeForm.produitId}
+              onChange={(e) => setEntreeForm((f) => ({ ...f, produitId: e.target.value }))}
+              disabled={!etablissementIdActif}
+            >
+              <option value="" disabled>{etablissementIdActif ? 'Choisir un produit' : 'Choisissez d\'abord un établissement'}</option>
+              {produitsFiltres.map((p) => <option key={p.id} value={p.id}>{p.nom} (stock : {p.quantiteStock})</option>)}
+            </Select>
           </Field>
+
+          {produitSelectionneEntree && (
+            <div className="rounded-lg bg-cream-100 dark:bg-white/5 p-3 mb-3 text-sm space-y-1">
+              <div className="flex justify-between">
+                <span>Stock actuellement disponible</span>
+                <span className="font-semibold">{produitSelectionneEntree.quantiteStock} {produitSelectionneEntree.unite}</span>
+              </div>
+              {entreeForm.quantite !== '' && (
+                <div className="flex justify-between text-success font-semibold">
+                  <span>Nouveau stock après entrée</span>
+                  <span>{Number(produitSelectionneEntree.quantiteStock) + Number(entreeForm.quantite)} {produitSelectionneEntree.unite}</span>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Quantité" required><input type="number" min="0.001" step="0.001" className="input" value={entreeForm.quantite} onChange={(e) => setEntreeForm((f) => ({ ...f, quantite: e.target.value }))} required /></Field>
+            <Field label="Quantité à ajouter" required><input type="number" min="0.001" step="0.001" className="input" value={entreeForm.quantite} onChange={(e) => setEntreeForm((f) => ({ ...f, quantite: e.target.value }))} required /></Field>
             <Field label="Prix d'achat unitaire (FCFA)"><input type="number" min="0" className="input" value={entreeForm.prixUnitaire} onChange={(e) => setEntreeForm((f) => ({ ...f, prixUnitaire: e.target.value }))} /></Field>
           </div>
         </form>
@@ -207,20 +271,59 @@ export default function MouvementsStockPage() {
         title="Nouvelle sortie de stock"
         footer={<>
           <button className="btn-secondary" onClick={() => setSortieOpen(false)}>Annuler</button>
-          <button className="btn-primary" onClick={submitSortie} disabled={sortie.isPending}>Enregistrer</button>
+          <button className="btn-primary" onClick={submitSortie} disabled={sortie.isPending || sortieDepasseStock}>Enregistrer</button>
         </>}
       >
         <form onSubmit={submitSortie}>
-          <Field label="Produit" required>
-            <div className="flex gap-2">
-              <Select className="flex-1" value={sortieForm.produitId} onChange={(e) => setSortieForm((f) => ({ ...f, produitId: e.target.value }))}>
-                <option value="" disabled>Choisir un produit</option>
-                {(produits || []).map((p) => <option key={p.id} value={p.id}>{p.nom} (stock : {p.quantiteStock})</option>)}
+          {superAdmin && (
+            <Field label="Établissement" required>
+              <Select
+                value={formEtablissementId}
+                onChange={(e) => { setFormEtablissementId(e.target.value); setSortieForm((f) => ({ ...f, produitId: '' })); setRechercheProduit(''); }}
+              >
+                <option value="" disabled>Choisir un établissement</option>
+                {(etablissements || []).map((et) => <option key={et.id} value={et.id}>{et.nom}</option>)}
               </Select>
+            </Field>
+          )}
+          <Field label="Produit" required>
+            <div className="flex gap-2 mb-2">
+              <input
+                className="input flex-1"
+                placeholder={etablissementIdActif ? 'Rechercher un produit...' : 'Choisissez un établissement'}
+                value={rechercheProduit}
+                onChange={(e) => setRechercheProduit(e.target.value)}
+                disabled={!etablissementIdActif}
+              />
               <button type="button" className="btn-secondary shrink-0" onClick={() => setScannerCible('SORTIE')}><QrCode size={15} /></button>
             </div>
+            <Select
+              value={sortieForm.produitId}
+              onChange={(e) => setSortieForm((f) => ({ ...f, produitId: e.target.value }))}
+              disabled={!etablissementIdActif}
+            >
+              <option value="" disabled>{etablissementIdActif ? 'Choisir un produit' : 'Choisissez d\'abord un établissement'}</option>
+              {produitsFiltres.map((p) => <option key={p.id} value={p.id}>{p.nom} (stock : {p.quantiteStock})</option>)}
+            </Select>
           </Field>
-          <Field label="Quantité" required><input type="number" min="0.001" step="0.001" className="input" value={sortieForm.quantite} onChange={(e) => setSortieForm((f) => ({ ...f, quantite: e.target.value }))} required /></Field>
+
+          {produitSelectionneSortie && (
+            <div className="rounded-lg bg-cream-100 dark:bg-white/5 p-3 mb-3 text-sm space-y-1">
+              <div className="flex justify-between">
+                <span>Stock actuellement disponible</span>
+                <span className="font-semibold">{produitSelectionneSortie.quantiteStock} {produitSelectionneSortie.unite}</span>
+              </div>
+              {sortieForm.quantite !== '' && (
+                <div className={`flex justify-between font-semibold ${sortieDepasseStock ? 'text-danger' : 'text-success'}`}>
+                  <span>Nouveau stock après sortie</span>
+                  <span>{Number(produitSelectionneSortie.quantiteStock) - Number(sortieForm.quantite)} {produitSelectionneSortie.unite}</span>
+                </div>
+              )}
+            </div>
+          )}
+          {sortieDepasseStock && <p className="text-xs text-danger mb-2">La quantité dépasse le stock disponible.</p>}
+
+          <Field label="Quantité à retirer" required><input type="number" min="0.001" step="0.001" className="input" value={sortieForm.quantite} onChange={(e) => setSortieForm((f) => ({ ...f, quantite: e.target.value }))} required /></Field>
           <Field label="Motif" required hint="Obligatoire pour toute sortie manuelle (RG-081).">
             <input className="input" value={sortieForm.motif} onChange={(e) => setSortieForm((f) => ({ ...f, motif: e.target.value }))} required />
           </Field>
