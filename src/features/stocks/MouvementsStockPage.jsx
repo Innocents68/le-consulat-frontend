@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Minus, QrCode, Pencil, Power } from 'lucide-react';
+import { Plus, Minus, QrCode, Pencil, Trash2 } from 'lucide-react';
 import api, { apiErrorMessage } from '../../lib/api';
 import DataTable from '../../components/ui/DataTable';
 import Modal from '../../components/ui/Modal';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import QrScannerModal from '../../components/ui/QrScannerModal';
 import PageHeader from '../../components/ui/PageHeader';
 import { Field, Select } from '../../components/ui/Field';
@@ -24,6 +25,7 @@ const TYPE_LABEL = {
   TRANSFERT_SORTANT: 'Transfert sortant',
   TRANSFERT_ENTRANT: 'Transfert entrant',
   AJUSTEMENT_INVENTAIRE: 'Ajustement inventaire',
+  ANNULATION_FACTURE: 'Annulation (facture supprimée)',
 };
 
 const EMPTY_SORTIE = { produitId: '', quantite: '', motif: '' };
@@ -89,10 +91,23 @@ export default function MouvementsStockPage() {
 
   const [editingProduit, setEditingProduit] = useState(null);
   const [produitFormOpen, setProduitFormOpen] = useState(false);
+
+  // Consu_corrige.docx §3 : "supprimer" remplace "désactiver" au premier niveau ; repli sur la
+  // désactivation si le produit a déjà un historique (rejeté par le backend avec un message clair).
+  const [supprimerProduitCible, setSupprimerProduitCible] = useState(null);
+  const [desactiverPropose, setDesactiverPropose] = useState(null); // { produit, message }
   const toggleActifProduit = useMutation({
     mutationFn: (id) => api.patch(`/produits/${id}/statut`).then((r) => r.data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['produits'] }); toast.success('Statut mis à jour.'); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['produits'] }); toast.success('Statut mis à jour.'); setDesactiverPropose(null); },
     onError: (e) => toast.error(apiErrorMessage(e)),
+  });
+  const supprimerProduit = useMutation({
+    mutationFn: (id) => api.delete(`/produits/${id}`),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['produits'] }); toast.success('Produit supprimé.'); setSupprimerProduitCible(null); },
+    onError: (e) => {
+      setSupprimerProduitCible(null);
+      setDesactiverPropose({ produit: supprimerProduitCible, message: apiErrorMessage(e) });
+    },
   });
 
   function ouvrirNouveauProduit() { setEditingProduit(null); setProduitFormOpen(true); }
@@ -116,7 +131,7 @@ export default function MouvementsStockPage() {
   async function traiterScan(texteDecode) {
     setScannerOuvert(false);
     try {
-      const { data: produit } = await api.get('/produits/scanner', { params: { code: texteDecode } });
+      const { data: produit } = await api.get('/produits/scanner', { params: { code: texteDecode, etablissementId: etablissementIdActif } });
       if (!superAdmin && String(produit.etablissementId) !== String(user?.etablissementId)) {
         toast.error(`Ce produit appartient à un autre établissement (${produit.etablissementNom}).`);
         return;
@@ -200,13 +215,9 @@ export default function MouvementsStockPage() {
             rowActions={(row) => (
               <>
                 <button className="btn-ghost p-1.5" title="Modifier (permet aussi d'augmenter le stock)" onClick={() => ouvrirModifierProduit(row)}><Pencil size={15} /></button>
-                <button
-                  className={`btn-ghost p-1.5 ${row.actif ? 'text-danger' : 'text-success'}`}
-                  title={row.actif ? 'Désactiver' : 'Activer'}
-                  onClick={() => toggleActifProduit.mutate(row.id)}
-                >
-                  <Power size={15} />
-                </button>
+                {superAdmin && (
+                  <button className="btn-ghost p-1.5 text-danger" title="Supprimer" onClick={() => setSupprimerProduitCible(row)}><Trash2 size={15} /></button>
+                )}
               </>
             )}
             emptyLabel="Aucun produit suivi en stock pour cet établissement."
@@ -329,6 +340,28 @@ export default function MouvementsStockPage() {
         onClose={() => setProduitFormOpen(false)}
         editing={editingProduit}
         defaultEtablissementId={table.filters.etablissementId}
+      />
+
+      <ConfirmDialog
+        open={!!supprimerProduitCible}
+        title="Supprimer le produit"
+        message={`Supprimer définitivement "${supprimerProduitCible?.nom}" ? Cette action est irréversible.`}
+        confirmLabel="Supprimer"
+        danger
+        loading={supprimerProduit.isPending}
+        onConfirm={() => supprimerProduit.mutate(supprimerProduitCible.id)}
+        onClose={() => setSupprimerProduitCible(null)}
+      />
+
+      <ConfirmDialog
+        open={!!desactiverPropose}
+        title="Suppression impossible"
+        message={`${desactiverPropose?.message} Voulez-vous le désactiver à la place (il disparaît du catalogue actif sans perdre son historique) ?`}
+        confirmLabel="Désactiver"
+        danger={false}
+        loading={toggleActifProduit.isPending}
+        onConfirm={() => toggleActifProduit.mutate(desactiverPropose.produit.id)}
+        onClose={() => setDesactiverPropose(null)}
       />
     </div>
   );

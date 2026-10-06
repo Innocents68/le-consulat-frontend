@@ -17,7 +17,7 @@ import { isSuperAdmin } from '../../lib/perimetre';
 
 const STATUT_LABEL = { BROUILLON: 'Brouillon', EN_COMPTAGE: 'En comptage', CLOTURE: 'Clôturé', VALIDE: 'Validé' };
 
-const EMPTY = { etablissementId: '', dateInventaire: '', commentaire: '' };
+const EMPTY = { etablissementId: '', dateInventaire: '', commentaire: '', mode: 'RAPIDE' };
 
 /** §6.6.5 : Brouillon -> En comptage -> Clôturé (écarts calculés) -> Validé (ajustements générés). */
 export default function InventairesPage() {
@@ -64,6 +64,7 @@ export default function InventairesPage() {
           { key: 'numero', header: 'Numéro' },
           { key: 'dateInventaire', header: 'Date', render: (r) => formatDate(r.dateInventaire) },
           { key: 'etablissementNom', header: 'Établissement' },
+          { key: 'mode', header: 'Mode', render: (r) => r.mode === 'COMPLET' ? 'Complet' : 'Rapide' },
           { key: 'statut', header: 'Statut', render: (r) => <StatusBadge status={r.statut} /> },
           { key: 'auteurNom', header: 'Auteur' },
           { key: 'validateurNom', header: 'Validé par', render: (r) => r.validateurNom || '—' },
@@ -121,6 +122,12 @@ export default function InventairesPage() {
           </Field>
           <Field label="Commentaire" hint="Facultatif à la création, peut aussi être renseigné à la clôture.">
             <input className="input" value={form.commentaire} onChange={(e) => setForm((f) => ({ ...f, commentaire: e.target.value }))} />
+          </Field>
+          <Field label="Mode" hint="Rapide : une ligne laissée vide reste conforme au stock théorique. Complet : chaque produit doit être explicitement compté.">
+            <Select value={form.mode} onChange={(e) => setForm((f) => ({ ...f, mode: e.target.value }))}>
+              <option value="RAPIDE">Rapide (recommandé pour le quotidien)</option>
+              <option value="COMPLET">Complet (contrôle physique exhaustif)</option>
+            </Select>
           </Field>
         </form>
       </Modal>

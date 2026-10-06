@@ -77,12 +77,13 @@ export default function NouvelleCommandeModal({ open, onClose, presetEtablisseme
     onClose();
   }
 
-  // Recommandations et corrections.md §7 : le texte décodé est envoyé tel quel au backend, qui
-  // en extrait l'id et applique le même contrôle de périmètre que GET /produits/{id}.
+  // Recommandations et corrections.md §7 : le texte décodé (QR interne ou code-barres) est
+  // envoyé tel quel au backend, qui applique le même contrôle de périmètre que GET /produits/{id}.
+  // etablissementId permet de désambiguïser un code-barres (peut exister dans 2 établissements).
   async function traiterScan(texteDecode) {
     setScannerOuvert(false);
     try {
-      const { data: produit } = await api.get('/produits/scanner', { params: { code: texteDecode } });
+      const { data: produit } = await api.get('/produits/scanner', { params: { code: texteDecode, etablissementId: etabActif } });
       if (String(produit.etablissementId) !== String(etabActif)) {
         toast.error(`Ce produit appartient à un autre établissement (${produit.etablissementNom}).`);
         return;

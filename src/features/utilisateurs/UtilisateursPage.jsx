@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
-import { Plus, Pencil, KeyRound, Power, Loader2 } from 'lucide-react';
+import { Plus, Pencil, KeyRound, Power, Trash2, Loader2 } from 'lucide-react';
 import api, { apiErrorMessage } from '../../lib/api';
 import DataTable from '../../components/ui/DataTable';
 import Modal from '../../components/ui/Modal';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import PageHeader from '../../components/ui/PageHeader';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { Field, Select } from '../../components/ui/Field';
@@ -50,6 +51,15 @@ export default function UtilisateursPage() {
     mutationFn: () => api.put(`/utilisateurs/${pwdTarget.id}/mot-de-passe`, { nouveauMotDePasse: newPassword }).then((r) => r.data),
     onSuccess: () => { toast.success('Mot de passe réinitialisé.'); setPwdTarget(null); setNewPassword(''); },
     onError: (e) => toast.error(apiErrorMessage(e)),
+  });
+
+  // Consu_corrige.docx §9 : suppression ajoutée à côté de la désactivation existante — impossible
+  // si l'utilisateur a déjà une activité enregistrée (le backend le refuse avec un message clair).
+  const [supprimerCible, setSupprimerCible] = useState(null);
+  const supprimer = useMutation({
+    mutationFn: (id) => api.delete(`/utilisateurs/${id}`),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['utilisateurs'] }); toast.success('Utilisateur supprimé.'); setSupprimerCible(null); },
+    onError: (e) => { toast.error(apiErrorMessage(e)); setSupprimerCible(null); },
   });
 
   function openCreate() { setEditing(null); setForm(EMPTY); setModalOpen(true); }
@@ -101,6 +111,7 @@ export default function UtilisateursPage() {
             <button className={`btn-ghost p-1.5 ${row.actif ? 'text-danger' : 'text-success'}`} title={row.actif ? 'Désactiver' : 'Activer'} onClick={() => toggleStatut.mutate(row.id)}>
               <Power size={15} />
             </button>
+            <button className="btn-ghost p-1.5 text-danger" title="Supprimer" onClick={() => setSupprimerCible(row)}><Trash2 size={15} /></button>
           </>
         )}
         emptyLabel="Aucun utilisateur."
@@ -158,6 +169,17 @@ export default function UtilisateursPage() {
           <input type="password" className="input" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoFocus />
         </Field>
       </Modal>
+
+      <ConfirmDialog
+        open={!!supprimerCible}
+        title="Supprimer l'utilisateur"
+        message={`Supprimer définitivement "${supprimerCible?.nom}" ? Cette action est irréversible.`}
+        confirmLabel="Supprimer"
+        danger
+        loading={supprimer.isPending}
+        onConfirm={() => supprimer.mutate(supprimerCible.id)}
+        onClose={() => setSupprimerCible(null)}
+      />
     </div>
   );
 }

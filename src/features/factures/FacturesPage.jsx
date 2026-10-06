@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, Printer, Download, Undo2 } from 'lucide-react';
+import { Eye, Printer, Download, Undo2, Trash2 } from 'lucide-react';
 import api, { apiErrorMessage, openAuthenticatedFile } from '../../lib/api';
 import DataTable from '../../components/ui/DataTable';
 import Modal from '../../components/ui/Modal';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import PageHeader from '../../components/ui/PageHeader';
 import { Field, Select } from '../../components/ui/Field';
 import { useTableState } from '../../hooks/useTableState';
@@ -125,6 +126,8 @@ export default function FacturesPage() {
 
   const [detailId, setDetailId] = useState(openParam ? Number(openParam) : null);
   const [avoirCible, setAvoirCible] = useState(null);
+  const [supprimerCible, setSupprimerCible] = useState(null);
+  const [motifSuppression, setMotifSuppression] = useState('');
   const { data: detail } = useQuery({
     queryKey: ['facture-detail', detailId],
     queryFn: async () => (await api.get(`/factures/${detailId}`)).data,
@@ -141,6 +144,20 @@ export default function FacturesPage() {
       setDetailId(data.rows[0].id);
     }
   }, [commandeIdParam, data]);
+
+  const supprimer = useMutation({
+    mutationFn: () => api.delete(`/factures/${supprimerCible.id}`, { data: { motif: motifSuppression } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['factures'] });
+      queryClient.invalidateQueries({ queryKey: ['mouvements-stock'] });
+      queryClient.invalidateQueries({ queryKey: ['produits'] });
+      queryClient.invalidateQueries({ queryKey: ['commandes'] });
+      toast.success('Facture supprimée.');
+      setSupprimerCible(null);
+      setMotifSuppression('');
+    },
+    onError: (e) => toast.error(apiErrorMessage(e)),
+  });
 
   const reimprimer = useMutation({
     mutationFn: (id) => api.post(`/factures/${id}/reimprimer`).then((r) => r.data),
@@ -191,6 +208,9 @@ export default function FacturesPage() {
             <button className="btn-ghost p-1.5" title="Télécharger le PDF" onClick={() => openAuthenticatedFile(`/factures/${row.id}/ticket.pdf`).catch((e) => toast.error(apiErrorMessage(e)))}><Download size={15} /></button>
             <button className="btn-ghost p-1.5" title="Réimprimer (DUPLICATA)" onClick={() => reimprimer.mutate(row.id)}><Printer size={15} /></button>
             <button className="btn-ghost p-1.5" title="Créer un avoir" onClick={() => setAvoirCible(row)}><Undo2 size={15} /></button>
+            {superAdmin && (
+              <button className="btn-ghost p-1.5 text-danger" title="Supprimer" onClick={() => setSupprimerCible(row)}><Trash2 size={15} /></button>
+            )}
           </>
         )}
         emptyLabel="Aucune facture."
@@ -237,6 +257,28 @@ export default function FacturesPage() {
         facture={avoirCible}
         onClose={() => setAvoirCible(null)}
         onCree={() => { setAvoirCible(null); queryClient.invalidateQueries({ queryKey: ['factures'] }); }}
+      />
+
+      <ConfirmDialog
+        open={!!supprimerCible}
+        title="Supprimer la facture"
+        message={
+          <div className="flex flex-col gap-3">
+            <p>
+              Supprimer définitivement la facture {supprimerCible?.numero} ? Le stock des produits suivis sera réintégré
+              et la commande d'origine repassera en "annulée". Cette action est irréversible et réservée à un cas exceptionnel
+              — pour une correction normale, utilisez plutôt "Créer un avoir".
+            </p>
+            <Field label="Motif de la suppression" required>
+              <input className="input" value={motifSuppression} onChange={(e) => setMotifSuppression(e.target.value)} autoFocus />
+            </Field>
+          </div>
+        }
+        confirmLabel="Supprimer"
+        danger
+        loading={supprimer.isPending}
+        onConfirm={() => { if (!motifSuppression.trim()) { toast.error('Le motif est obligatoire.'); return; } supprimer.mutate(); }}
+        onClose={() => { setSupprimerCible(null); setMotifSuppression(''); }}
       />
     </div>
   );

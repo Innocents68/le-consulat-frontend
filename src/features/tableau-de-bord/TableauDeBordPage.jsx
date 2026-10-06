@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ShoppingCart, Boxes, Wallet, Users, ArrowRight, ArrowUpRight, ArrowDownRight,
   UtensilsCrossed, Wine, ChefHat, PackageSearch, TrendingUp, Settings, LifeBuoy, DatabaseBackup, Lightbulb,
+  TriangleAlert,
 } from 'lucide-react';
 import api, { apiErrorMessage } from '../../lib/api';
 import { Loader, ErrorState } from '../../components/ui/Feedback';
@@ -55,6 +56,13 @@ export default function TableauDeBordPage() {
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['tableau-de-bord'],
     queryFn: async () => (await api.get('/tableau-de-bord')).data,
+  });
+
+  // Consu_corrige.docx §7 : alerte visible pour tout produit suivi passé sous son seuil
+  // (le seuil par défaut se règle dans Paramètres généraux, déjà en place).
+  const { data: produitsAlerte } = useQuery({
+    queryKey: ['produits-alertes-stock'],
+    queryFn: async () => (await api.get('/produits/alertes-stock')).data,
   });
 
   const sauvegarder = useMutation({
@@ -111,6 +119,30 @@ export default function TableauDeBordPage() {
           <KpiCard icon={Users} iconBg="bg-blue-600" label="Utilisateurs actifs" value={`${data.utilisateursActifs} / ${data.utilisateursTotal}`} />
         )}
       </div>
+
+      {produitsAlerte && produitsAlerte.length > 0 && (
+        <div className="card p-4 border-danger/30 bg-danger/5">
+          <div className="flex items-center gap-2 mb-3">
+            <TriangleAlert size={18} className="text-danger shrink-0" />
+            <p className="font-bold text-danger">Stock faible — {produitsAlerte.length} produit{produitsAlerte.length > 1 ? 's' : ''} sous le seuil d'alerte</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {produitsAlerte.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => navigate(`/mouvements-stock?etablissementId=${p.etablissementId}`)}
+                className="flex items-center justify-between text-sm rounded-lg border border-danger/20 bg-white dark:bg-white/5 px-3 py-2 text-left hover:border-danger/50"
+              >
+                <span className="truncate">
+                  <span className="font-medium">{p.nom}</span>
+                  {superAdmin && <span className="text-ink-light"> ({p.etablissementNom})</span>}
+                </span>
+                <span className="text-danger font-bold shrink-0 ml-2">{p.quantiteStock} / {p.seuilAlerte}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className={`grid grid-cols-1 ${data.etablissements.length > 1 ? 'md:grid-cols-3' : ''} gap-4`}>
         {data.etablissements.map((e) => {

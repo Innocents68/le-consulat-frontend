@@ -53,7 +53,7 @@ function GroupLink({ item, collapsed, onNavigate }) {
   );
 }
 
-function GroupWithChildren({ group, collapsed, onNavigate, superAdmin, user }) {
+function GroupWithChildren({ group, collapsed, onNavigate, superAdmin, user, badges }) {
   const location = useLocation();
   const items = group.items.filter((it) =>
     (!it.superAdminOnly || superAdmin) && (!it.etablissementNom || superAdmin || user?.etablissementNom === it.etablissementNom));
@@ -82,10 +82,11 @@ function GroupWithChildren({ group, collapsed, onNavigate, superAdmin, user }) {
               to={item.to}
               onClick={onNavigate}
               className={({ isActive }) =>
-                `block px-3 py-2 text-sm ${isActive ? 'text-gold font-semibold' : 'text-cream-100/85 hover:text-white'}`
+                `flex items-center justify-between gap-2 px-3 py-2 text-sm ${isActive ? 'text-gold font-semibold' : 'text-cream-100/85 hover:text-white'}`
               }
             >
-              {item.label}
+              <span>{item.label}</span>
+              {!!badges?.[item.to] && <NotifBadge count={badges[item.to]} />}
             </NavLink>
           ))}
         </div>
@@ -119,7 +120,8 @@ function GroupWithChildren({ group, collapsed, onNavigate, superAdmin, user }) {
               }
             >
               <item.icon size={15} className="shrink-0" />
-              <span className="truncate">{item.label}</span>
+              <span className="flex-1 truncate">{item.label}</span>
+              {!!badges?.[item.to] && <NotifBadge count={badges[item.to]} />}
             </NavLink>
           ))}
         </div>
@@ -128,10 +130,28 @@ function GroupWithChildren({ group, collapsed, onNavigate, superAdmin, user }) {
   );
 }
 
+/** Demandes_amelioration_logiciel_Le_Consulat_Professionnel.docx §5 : notification in-app (pas de
+ * temps réel — se met à jour à l'ouverture des pages/à l'intervalle de la requête) du nombre de
+ * demandes de transfert en attente adressées à l'établissement de l'utilisateur connecté. */
+function NotifBadge({ count }) {
+  return (
+    <span className="shrink-0 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-gold text-bordeaux-900 text-[10px] font-bold">
+      {count > 9 ? '9+' : count}
+    </span>
+  );
+}
+
 export default function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, sidebarMobileOpen, setSidebarMobileOpen } = useAppStore();
   const user = useAuthStore((s) => s.user);
   const superAdmin = isSuperAdmin(user);
+
+  const { data: transfertsEnAttente } = useQuery({
+    queryKey: ['demandes-transfert-compte'],
+    queryFn: async () => (await api.get('/demandes-transfert/compte-en-attente')).data,
+    refetchInterval: 60000,
+  });
+  const badges = { '/transferts': transfertsEnAttente?.count || 0 };
 
   const visibleGroups = NAV_GROUPS.filter((g) =>
     (!g.superAdminOnly || superAdmin) &&
@@ -165,7 +185,7 @@ export default function Sidebar() {
         <nav className="flex-1 overflow-y-auto px-2.5 flex flex-col gap-1 pb-4">
           {visibleGroups.map((g) =>
             g.items ? (
-              <GroupWithChildren key={g.id} group={g} collapsed={sidebarCollapsed} onNavigate={closeMobile} superAdmin={superAdmin} user={user} />
+              <GroupWithChildren key={g.id} group={g} collapsed={sidebarCollapsed} onNavigate={closeMobile} superAdmin={superAdmin} user={user} badges={badges} />
             ) : (
               <GroupLink key={g.id} item={g} collapsed={sidebarCollapsed} onNavigate={closeMobile} />
             )

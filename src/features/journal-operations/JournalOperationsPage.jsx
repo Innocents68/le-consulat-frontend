@@ -1,19 +1,32 @@
 import { useQuery } from '@tanstack/react-query';
+import { Download, FileSpreadsheet } from 'lucide-react';
 import DataTable from '../../components/ui/DataTable';
 import PageHeader from '../../components/ui/PageHeader';
 import { Select } from '../../components/ui/Field';
 import { useTableState } from '../../hooks/useTableState';
 import { useListQuery } from '../../hooks/useResource';
 import { formatDateTime } from '../../lib/format';
+import { downloadExport } from '../../lib/download';
 import api, { fetchPage, apiErrorMessage } from '../../lib/api';
+import { useToast } from '../../components/ui/Toast';
 import { useAuthStore } from '../../store/authStore';
 import { isSuperAdmin } from '../../lib/perimetre';
 
 export default function JournalOperationsPage() {
+  const toast = useToast();
   const user = useAuthStore((s) => s.user);
   const superAdmin = isSuperAdmin(user);
   const table = useTableState({ initialSize: 15, extraFilters: { utilisateurId: '', module: '', etablissementId: '' } });
   const { data, isLoading, isError, error, refetch } = useListQuery('journal-operations', table.params);
+
+  // Consu_corrige.docx §8.
+  async function exporter(format) {
+    try {
+      await downloadExport('/journal-operations/export', { ...table.params, format }, `journal-operations.${format === 'excel' ? 'xlsx' : 'pdf'}`);
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
   // Réservés au Super Administrateur : un Gérant/Caissier n'a pas accès à /utilisateurs
   // (matrice §3.3) et n'a de toute façon pas à filtrer sur un établissement autre que le sien
   // (RG-016, RG-099) — inutile de tenter ces requêtes pour lui.
@@ -30,7 +43,14 @@ export default function JournalOperationsPage() {
 
   return (
     <div>
-      <PageHeader title="Journal des opérations" subtitle="Traçabilité de toutes les actions sensibles — lecture seule." />
+      <PageHeader
+        title="Journal des opérations"
+        subtitle="Traçabilité de toutes les actions sensibles — lecture seule."
+        actions={<>
+          <button className="btn-secondary" onClick={() => exporter('pdf')}><Download size={15} /> PDF</button>
+          <button className="btn-secondary" onClick={() => exporter('excel')}><FileSpreadsheet size={15} /> Excel</button>
+        </>}
+      />
 
       <DataTable
         columns={[

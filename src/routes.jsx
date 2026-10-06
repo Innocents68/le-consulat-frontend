@@ -66,7 +66,7 @@ export const router = createBrowserRouter([
       { path: 'mouvements-stock', element: withSuspense(<MouvementsStockPage />) },
       { path: 'inventaires', element: withSuspense(<InventairesPage />) },
       { path: 'inventaires/:id', element: withSuspense(<InventaireDetailPage />) },
-      { path: 'transferts', element: withSuspense(<RequireSuperAdmin><TransfertsPage /></RequireSuperAdmin>) },
+      { path: 'transferts', element: withSuspense(<TransfertsPage />) },
       { path: 'tables', element: withSuspense(<TablesPage />) },
       { path: 'depenses', element: withSuspense(<DepensesPage />) },
       { path: 'categories-depenses', element: withSuspense(<RequireSuperAdmin><CategoriesDepensesPage /></RequireSuperAdmin>) },

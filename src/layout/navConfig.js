@@ -55,7 +55,10 @@ export const NAV_GROUPS = [
       { label: 'Stock Cave à vin', icon: Boxes, to: '/mouvements-stock?etablissementId=3', etablissementNom: 'Cave à vin' },
       { label: 'Stock Maquis', icon: Boxes, to: '/mouvements-stock?etablissementId=1', etablissementNom: 'Maquis' },
       { label: 'Inventaires', icon: ClipboardList, to: '/inventaires' },
-      { label: 'Transferts', icon: ArrowLeftRight, to: '/transferts', superAdminOnly: true },
+      // Demandes_amelioration_logiciel_Le_Consulat_Professionnel.docx §5 : un Gérant/Caissier peut
+      // désormais demander un transfert depuis son propre établissement (le transfert immédiat,
+      // lui, reste réservé au Super Administrateur, RG-084 — cf. l'onglet dédié de la page).
+      { label: 'Transferts', icon: ArrowLeftRight, to: '/transferts' },
     ],
   },
   {

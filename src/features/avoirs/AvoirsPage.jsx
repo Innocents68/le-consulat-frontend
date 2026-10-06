@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Eye, Download } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Eye, Download, Plus } from 'lucide-react';
 import api, { apiErrorMessage, openAuthenticatedFile } from '../../lib/api';
 import DataTable from '../../components/ui/DataTable';
 import Modal from '../../components/ui/Modal';
 import PageHeader from '../../components/ui/PageHeader';
 import StatusBadge from '../../components/ui/StatusBadge';
-import { Select } from '../../components/ui/Field';
+import { Field, Select } from '../../components/ui/Field';
 import { useTableState } from '../../hooks/useTableState';
 import { useListQuery } from '../../hooks/useResource';
 import { formatFCFA, formatDateTime } from '../../lib/format';
@@ -14,9 +14,79 @@ import { useAuthStore } from '../../store/authStore';
 import { isSuperAdmin } from '../../lib/perimetre';
 import { useToast } from '../../components/ui/Toast';
 
-/** Liste en lecture seule (RG-065 : un avoir est immuable une fois créé). */
+const MOTIFS = [
+  { value: 'ERREUR_SAISIE', label: 'Erreur de saisie' },
+  { value: 'PRODUIT_NON_SERVI', label: 'Produit non servi' },
+  { value: 'RETOUR', label: 'Retour' },
+  { value: 'GESTE_COMMERCIAL', label: 'Geste commercial' },
+  { value: 'AUTRE', label: 'Autre' },
+];
+const MODES_REMBOURSEMENT = [
+  { value: 'ESPECES', label: 'Espèces' },
+  { value: 'MOBILE_MONEY', label: 'Mobile Money' },
+  { value: 'AVOIR_A_VALOIR', label: 'Avoir à valoir' },
+  { value: 'NON_REMBOURSE', label: 'Non remboursé' },
+];
+const EMPTY_NOUVEL_AVOIR = { factureNumero: '', montant: '', motif: 'ERREUR_SAISIE', motifDetail: '', modeRemboursement: 'ESPECES' };
+
+/** Consu_corrige.docx §1 : formulaire libre — saisie directe du numéro de facture et du montant,
+ * sans passer par la sélection ligne par ligne (ça reste l'usage normal depuis Factures). */
+function NouvelAvoirModal({ open, onClose, onCree }) {
+  const toast = useToast();
+  const [form, setForm] = useState(EMPTY_NOUVEL_AVOIR);
+
+  const create = useMutation({
+    mutationFn: () => api.post('/avoirs', {
+      factureNumero: form.factureNumero.trim(),
+      montant: Number(form.montant),
+      motif: form.motif,
+      motifDetail: form.motifDetail || null,
+      modeRemboursement: form.modeRemboursement,
+    }).then((r) => r.data),
+    onSuccess: (avoir) => { toast.success(`Avoir ${avoir.numero} créé.`); setForm(EMPTY_NOUVEL_AVOIR); onCree(); },
+    onError: (e) => toast.error(apiErrorMessage(e)),
+  });
+
+  function handleClose() { setForm(EMPTY_NOUVEL_AVOIR); onClose(); }
+
+  return (
+    <Modal
+      open={open}
+      onClose={handleClose}
+      title="Nouvel avoir"
+      footer={<>
+        <button className="btn-secondary" onClick={handleClose}>Annuler</button>
+        <button className="btn-primary" onClick={() => create.mutate()} disabled={!form.factureNumero || !form.montant || create.isPending}>
+          Enregistrer
+        </button>
+      </>}
+    >
+      <Field label="Numéro de facture" required hint="Le numéro imprimé sur la facture d'origine.">
+        <input className="input" value={form.factureNumero} onChange={(e) => setForm((f) => ({ ...f, factureNumero: e.target.value }))} autoFocus />
+      </Field>
+      <Field label="Montant de l'avoir (FCFA)" required>
+        <input type="number" min="1" className="input" value={form.montant} onChange={(e) => setForm((f) => ({ ...f, montant: e.target.value }))} />
+      </Field>
+      <Field label="Motif" required>
+        <Select value={form.motif} onChange={(e) => setForm((f) => ({ ...f, motif: e.target.value }))}>
+          {MOTIFS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+        </Select>
+      </Field>
+      <Field label="Détail (optionnel)"><input className="input" value={form.motifDetail} onChange={(e) => setForm((f) => ({ ...f, motifDetail: e.target.value }))} /></Field>
+      <Field label="Mode de remboursement" required>
+        <Select value={form.modeRemboursement} onChange={(e) => setForm((f) => ({ ...f, modeRemboursement: e.target.value }))}>
+          {MODES_REMBOURSEMENT.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+        </Select>
+      </Field>
+    </Modal>
+  );
+}
+
+/** Liste en lecture seule (RG-065 : un avoir est immuable une fois créé) — hormis la création
+ * libre (§1) et le solde consommable au fil des encaissements. */
 export default function AvoirsPage() {
   const toast = useToast();
+  const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const superAdmin = isSuperAdmin(user);
 
@@ -27,6 +97,7 @@ export default function AvoirsPage() {
   const { data: etablissements } = useQuery({ queryKey: ['etablissements'], queryFn: async () => (await api.get('/etablissements')).data });
 
   const [detailId, setDetailId] = useState(null);
+  const [nouvelOuvert, setNouvelOuvert] = useState(false);
   const { data: detail } = useQuery({
     queryKey: ['avoir-detail', detailId],
     queryFn: async () => (await api.get(`/avoirs/${detailId}`)).data,
@@ -35,7 +106,11 @@ export default function AvoirsPage() {
 
   return (
     <div>
-      <PageHeader title="Avoirs" subtitle="Corrections de factures déjà émises — document immuable (§6.2.7)." />
+      <PageHeader
+        title="Avoirs"
+        subtitle="Corrections de factures déjà émises — document immuable (§6.2.7)."
+        actions={<button className="btn-primary" onClick={() => setNouvelOuvert(true)}><Plus size={16} /> Nouvel avoir</button>}
+      />
 
       <DataTable
         columns={[
@@ -105,6 +180,12 @@ export default function AvoirsPage() {
           </div>
         )}
       </Modal>
+
+      <NouvelAvoirModal
+        open={nouvelOuvert}
+        onClose={() => setNouvelOuvert(false)}
+        onCree={() => { setNouvelOuvert(false); queryClient.invalidateQueries({ queryKey: ['avoirs'] }); }}
+      />
     </div>
   );
 }

@@ -42,6 +42,7 @@ export default function CommandesPage() {
   const [encaissementCible, setEncaissementCible] = useState(null);
   const [annulerCible, setAnnulerCible] = useState(null);
   const [motif, setMotif] = useState('');
+  const [supprimerCible, setSupprimerCible] = useState(null);
 
   const { data: detail } = useQuery({
     queryKey: ['commande-detail', detailId],
@@ -96,6 +97,18 @@ export default function CommandesPage() {
       setMotif('');
     },
     onError: (e) => toast.error(apiErrorMessage(e)),
+  });
+
+  const supprimer = useMutation({
+    mutationFn: (id) => api.delete(`/commandes/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['commandes'] });
+      queryClient.invalidateQueries({ queryKey: ['tables-libres'] });
+      queryClient.invalidateQueries({ queryKey: ['tables'] });
+      toast.success('Commande supprimée.');
+      setSupprimerCible(null);
+    },
+    onError: (e) => { toast.error(apiErrorMessage(e)); setSupprimerCible(null); },
   });
 
   function verFacture(commandeId) {
@@ -156,6 +169,9 @@ export default function CommandesPage() {
             )}
             {row.statut !== 'NON_VALIDEE' && row.statut !== 'ANNULEE' && (
               <button className="btn-ghost p-1.5" title="Voir la facture" onClick={() => verFacture(row.id)}><FileText size={15} /></button>
+            )}
+            {superAdmin && (row.statut === 'NON_VALIDEE' || row.statut === 'ANNULEE') && (
+              <button className="btn-ghost p-1.5 text-danger" title="Supprimer" onClick={() => setSupprimerCible(row)}><Trash2 size={15} /></button>
             )}
           </>
         )}
@@ -245,6 +261,17 @@ export default function CommandesPage() {
         loading={annuler.isPending}
         onConfirm={() => { if (!motif.trim()) { toast.error('Le motif est obligatoire.'); return; } annuler.mutate(); }}
         onClose={() => { setAnnulerCible(null); setMotif(''); }}
+      />
+
+      <ConfirmDialog
+        open={!!supprimerCible}
+        title="Supprimer la commande"
+        message={`Supprimer définitivement la commande ${supprimerCible?.numero} ? Cette action est irréversible.`}
+        confirmLabel="Supprimer"
+        danger
+        loading={supprimer.isPending}
+        onConfirm={() => supprimer.mutate(supprimerCible.id)}
+        onClose={() => setSupprimerCible(null)}
       />
     </div>
   );

@@ -1,17 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import QrScanner from 'qr-scanner';
-// Chemin du worker requis par qr-scanner sous Vite (cf. README du paquet) — sans ça, le décodage
-// tourne sur le thread principal ou échoue à charger le worker en production.
-import QrScannerWorkerPath from 'qr-scanner/qr-scanner-worker.min.js?url';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 import Modal from './Modal';
 
-QrScanner.WORKER_PATH = QrScannerWorkerPath;
-
-/** Recommandations et corrections.md §7 : scanner caméra réutilisable (Nouvelle commande,
- * Nouvelle entrée/sortie de stock). N'appelle {@code onScan} qu'une fois par ouverture — c'est
- * à l'appelant de fermer la modale (elle ne se ferme pas toute seule) après avoir traité le
- * résultat, pour pouvoir d'abord afficher une erreur si le code scanné n'est pas valide. */
-export default function QrScannerModal({ open, onClose, onScan, title = 'Scanner un QR code' }) {
+/** Scanner caméra réutilisable (Nouvelle commande, Nouvelle entrée/sortie de stock) — lit à la
+ * fois un QR code interne ET un code-barres linéaire (EAN-13 du fabricant, Code128 généré),
+ * via ZXing plutôt qu'un décodeur QR-only : un seul scanner pour les deux besoins, le backend
+ * (`/produits/scanner`) décide ensuite lequel des deux formats a été lu. N'appelle {@code onScan}
+ * qu'une fois par ouverture — c'est à l'appelant de fermer la modale (elle ne se ferme pas toute
+ * seule) après avoir traité le résultat, pour pouvoir d'abord afficher une erreur si le code
+ * scanné n'est pas reconnu. */
+export default function QrScannerModal({ open, onClose, onScan, title = 'Scanner un QR code ou un code-barres' }) {
   const videoRef = useRef(null);
   const [erreur, setErreur] = useState('');
 
@@ -19,20 +17,21 @@ export default function QrScannerModal({ open, onClose, onScan, title = 'Scanner
     if (!open || !videoRef.current) return undefined;
     setErreur('');
     let dejaScanne = false;
-    const scanner = new QrScanner(
+    const reader = new BrowserMultiFormatReader();
+    const controls = { current: null };
+
+    reader.decodeFromConstraints(
+      { video: { facingMode: 'environment' } },
       videoRef.current,
       (result) => {
-        if (dejaScanne) return;
-        dejaScanne = true;
-        onScan(result.data);
-      },
-      { highlightScanRegion: true, highlightCodeOutline: true, preferredCamera: 'environment' }
-    );
-    scanner.start().catch(() => setErreur("Impossible d'accéder à la caméra. Vérifiez les autorisations du navigateur."));
-    return () => {
-      scanner.stop();
-      scanner.destroy();
-    };
+        if (result && !dejaScanne) {
+          dejaScanne = true;
+          onScan(result.getText());
+        }
+      }
+    ).then((c) => { controls.current = c; }).catch(() => setErreur("Impossible d'accéder à la caméra. Vérifiez les autorisations du navigateur."));
+
+    return () => controls.current?.stop();
   }, [open, onScan]);
 
   return (
@@ -40,7 +39,7 @@ export default function QrScannerModal({ open, onClose, onScan, title = 'Scanner
       <div className="flex flex-col items-center gap-3">
         <video ref={videoRef} className="w-full max-w-sm rounded-lg bg-black aspect-square object-cover" muted playsInline />
         {erreur && <p className="text-sm text-danger">{erreur}</p>}
-        <p className="text-xs text-ink-light">Visez le QR code du produit avec la caméra.</p>
+        <p className="text-xs text-ink-light">Visez le QR code ou le code-barres du produit avec la caméra.</p>
       </div>
     </Modal>
   );

@@ -28,6 +28,9 @@ export default function EncaissementModal({ commande, onClose, onEncaisse }) {
   const [avoirVerifie, setAvoirVerifie] = useState(null); // { numero, soldeRestant } une fois vérifié
   const [avoirErreur, setAvoirErreur] = useState('');
   const [convertirMonnaieEnAvoir, setConvertirMonnaieEnAvoir] = useState(false);
+  // Consu_corrige.docx §5 : montant libre plutôt que systématiquement toute la monnaie — souvent
+  // la caisse a une partie de la monnaie mais pas la totalité.
+  const [montantAvoirMonnaie, setMontantAvoirMonnaie] = useState('');
 
   const montantNet = commande?.montantNet || 0;
   const montantAvoirApplique = avoirVerifie ? Math.min(avoirVerifie.soldeRestant, montantNet) : 0;
@@ -37,6 +40,10 @@ export default function EncaissementModal({ commande, onClose, onEncaisse }) {
     if (mode !== 'ESPECES' || !montantRecu) return 0;
     return Math.max(0, Number(montantRecu) - montantAPayer);
   }, [mode, montantRecu, montantAPayer]);
+
+  const montantAConvertir = convertirMonnaieEnAvoir
+    ? Math.min(monnaie, Math.max(0, Number(montantAvoirMonnaie) || 0))
+    : 0;
 
   const verifierAvoir = useMutation({
     mutationFn: () => api.get(`/avoirs/numero/${encodeURIComponent(avoirNumero.trim())}`, {
@@ -57,15 +64,15 @@ export default function EncaissementModal({ commande, onClose, onEncaisse }) {
       modePaiement: mode,
       montantRecu: mode === 'ESPECES' && montantAPayer > 0 ? Number(montantRecu) : undefined,
       avoirNumero: avoirVerifie ? avoirVerifie.numero : undefined,
-      montantConvertiEnAvoir: convertirMonnaieEnAvoir && monnaie > 0 ? monnaie : undefined,
+      montantConvertiEnAvoir: montantAConvertir > 0 ? montantAConvertir : undefined,
     }).then((r) => r.data),
     onSuccess: (facture) => {
       queryClient.invalidateQueries({ queryKey: ['commandes'] });
       queryClient.invalidateQueries({ queryKey: ['tables-libres'] });
       queryClient.invalidateQueries({ queryKey: ['tables'] });
       queryClient.invalidateQueries({ queryKey: ['avoirs'] });
-      const messageAvoir = convertirMonnaieEnAvoir && monnaie > 0
-        ? ` Un avoir de ${formatFCFA(monnaie)} a été créé pour le client.`
+      const messageAvoir = montantAConvertir > 0
+        ? ` Un avoir de ${formatFCFA(montantAConvertir)} a été créé pour le client.`
         : '';
       toast.success(`Paiement validé — facture ${facture.numero}.${messageAvoir}`);
       onEncaisse(facture);
@@ -143,10 +150,33 @@ export default function EncaissementModal({ commande, onClose, onEncaisse }) {
             <span>{formatFCFA(monnaie)}</span>
           </div>
           {monnaie > 0 && (
-            <label className="flex items-center gap-2 text-sm mt-2">
-              <input type="checkbox" checked={convertirMonnaieEnAvoir} onChange={(e) => setConvertirMonnaieEnAvoir(e.target.checked)} />
-              Caisse sans monnaie — convertir {formatFCFA(monnaie)} en avoir client
-            </label>
+            <div className="mt-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={convertirMonnaieEnAvoir}
+                  onChange={(e) => {
+                    setConvertirMonnaieEnAvoir(e.target.checked);
+                    setMontantAvoirMonnaie(e.target.checked ? String(monnaie) : '');
+                  }}
+                />
+                Caisse sans monnaie — convertir une partie ou la totalité en avoir client
+              </label>
+              {convertirMonnaieEnAvoir && (
+                <Field label="Montant à convertir en avoir (FCFA)" hint={`Jusqu'à ${formatFCFA(monnaie)} (souvent la caisse n'a qu'une partie de la monnaie).`}>
+                  <input
+                    type="number" min="0" max={monnaie} className="input"
+                    value={montantAvoirMonnaie}
+                    onChange={(e) => setMontantAvoirMonnaie(e.target.value)}
+                  />
+                </Field>
+              )}
+              {montantAConvertir > 0 && (
+                <p className="text-xs text-ink-light mt-1">
+                  Monnaie restant à rendre en espèces : <strong>{formatFCFA(monnaie - montantAConvertir)}</strong>
+                </p>
+              )}
+            </div>
           )}
         </>
       )}
