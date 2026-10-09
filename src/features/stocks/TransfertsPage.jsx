@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Send, Inbox, History, Check, X } from 'lucide-react';
 import api, { apiErrorMessage, fetchPage } from '../../lib/api';
 import DataTable from '../../components/ui/DataTable';
-import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import PageHeader from '../../components/ui/PageHeader';
 import StatusBadge from '../../components/ui/StatusBadge';
@@ -140,7 +139,6 @@ function NouvelleDemande({ superAdmin, user, etablissements, toast, queryClient,
 function DemandesRecues({ superAdmin, user, etablissements, toast, queryClient }) {
   const [etablissementId, setEtablissementId] = useState(superAdmin ? '' : String(user?.etablissementId || ''));
   const [accepterCible, setAccepterCible] = useState(null);
-  const [produitDestinationId, setProduitDestinationId] = useState('');
   const [refuserCible, setRefuserCible] = useState(null);
   const [motifRefus, setMotifRefus] = useState('');
 
@@ -151,24 +149,17 @@ function DemandesRecues({ superAdmin, user, etablissements, toast, queryClient }
     refetchInterval: 60000,
   });
 
-  const { data: produitsDestination } = useQuery({
-    queryKey: ['produits-suivis', accepterCible?.etablissementDestinationId],
-    queryFn: async () => {
-      const { data } = await api.get('/produits', { params: { etablissementId: accepterCible.etablissementDestinationId, size: 200 } });
-      return (data.content || []).filter((p) => p.suiviStock);
-    },
-    enabled: !!accepterCible,
-  });
-
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['demandes-transfert'] });
     queryClient.invalidateQueries({ queryKey: ['produits'] });
     queryClient.invalidateQueries({ queryKey: ['mouvements-stock'] });
   };
 
+  // Le produit destination est résolu automatiquement côté backend (correspondance de nom avec
+  // le catalogue de l'établissement destinataire, créé si besoin) — plus de choix manuel ici.
   const accepter = useMutation({
-    mutationFn: ({ id, produitDestinationId }) => api.post(`/demandes-transfert/${id}/accepter`, { produitDestinationId: Number(produitDestinationId) }).then((r) => r.data),
-    onSuccess: () => { invalidate(); toast.success('Transfert accepté et effectué.'); setAccepterCible(null); setProduitDestinationId(''); },
+    mutationFn: (id) => api.post(`/demandes-transfert/${id}/accepter`).then((r) => r.data),
+    onSuccess: () => { invalidate(); toast.success('Transfert accepté et effectué.'); setAccepterCible(null); },
     onError: (e) => toast.error(apiErrorMessage(e)),
   });
   const refuser = useMutation({
@@ -206,33 +197,22 @@ function DemandesRecues({ superAdmin, user, etablissements, toast, queryClient }
         onRetry={refetch}
         rowActions={(row) => row.statut === 'EN_ATTENTE' && (
           <>
-            <button className="btn-ghost p-1.5 text-success" title="Accepter" onClick={() => { setAccepterCible(row); setProduitDestinationId(''); }}><Check size={15} /></button>
+            <button className="btn-ghost p-1.5 text-success" title="Accepter" onClick={() => setAccepterCible(row)}><Check size={15} /></button>
             <button className="btn-ghost p-1.5 text-danger" title="Refuser" onClick={() => { setRefuserCible(row); setMotifRefus(''); }}><X size={15} /></button>
           </>
         )}
         emptyLabel={!etablissementId && superAdmin ? 'Choisissez un établissement.' : 'Aucune demande reçue.'}
       />
 
-      <Modal
+      <ConfirmDialog
         open={!!accepterCible}
         onClose={() => setAccepterCible(null)}
+        onConfirm={() => accepter.mutate(accepterCible.id)}
         title="Accepter le transfert"
-        footer={<>
-          <button className="btn-secondary" onClick={() => setAccepterCible(null)}>Annuler</button>
-          <button className="btn-primary" disabled={!produitDestinationId || accepter.isPending} onClick={() => accepter.mutate({ id: accepterCible.id, produitDestinationId })}>Accepter et transférer</button>
-        </>}
-      >
-        <p className="text-sm text-ink-light mb-3">
-          {accepterCible?.demandeurNom} demande de transférer {accepterCible?.quantite} {accepterCible?.produitSourceNom} depuis {accepterCible?.etablissementSourceNom}.
-          Choisissez le produit correspondant dans votre catalogue :
-        </p>
-        <Field label="Produit destination" required>
-          <Select value={produitDestinationId} onChange={(e) => setProduitDestinationId(e.target.value)}>
-            <option value="" disabled>Choisir un produit</option>
-            {(produitsDestination || []).map((p) => <option key={p.id} value={p.id}>{p.nom} (stock : {p.quantiteStock})</option>)}
-          </Select>
-        </Field>
-      </Modal>
+        message={`${accepterCible?.demandeurNom} demande de transférer ${accepterCible?.quantite} ${accepterCible?.produitSourceNom} depuis ${accepterCible?.etablissementSourceNom}. Le produit correspondant sera reconnu automatiquement dans votre catalogue (ou créé s'il n'existe pas encore).`}
+        confirmLabel="Accepter et transférer"
+        loading={accepter.isPending}
+      />
 
       <ConfirmDialog
         open={!!refuserCible}
