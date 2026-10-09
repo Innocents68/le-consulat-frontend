@@ -22,6 +22,7 @@ export default function ParametresPage() {
 
   const [form, setForm] = useState(EMPTY);
   const [logoFile, setLogoFile] = useState(null);
+  const [guideFile, setGuideFile] = useState(null);
 
   useEffect(() => {
     if (data) setForm({ ...EMPTY, ...data });
@@ -40,6 +41,16 @@ export default function ParametresPage() {
       return api.post('/parametres/logo', body, { headers: { 'Content-Type': undefined } }).then((r) => r.data);
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['parametres'] }); queryClient.invalidateQueries({ queryKey: ['parametres-publics'] }); toast.success('Logo mis à jour.'); setLogoFile(null); },
+    onError: (e) => toast.error(apiErrorMessage(e)),
+  });
+
+  const uploadGuide = useMutation({
+    mutationFn: (file) => {
+      const body = new FormData();
+      body.append('fichier', file);
+      return api.post('/parametres/guide-pdf', body, { headers: { 'Content-Type': undefined } }).then((r) => r.data);
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['parametres'] }); queryClient.invalidateQueries({ queryKey: ['parametres-publics'] }); toast.success('Guide mis à jour.'); setGuideFile(null); },
     onError: (e) => toast.error(apiErrorMessage(e)),
   });
 
@@ -78,6 +89,23 @@ export default function ParametresPage() {
           <div className="grid grid-cols-2 gap-3">
             <Field label="Téléphone"><input className="input" value={form.telephone || ''} onChange={(e) => setForm((f) => ({ ...f, telephone: e.target.value }))} /></Field>
             <Field label="E-mail"><input type="email" className="input" value={form.email || ''} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></Field>
+          </div>
+        </div>
+
+        <div className="card p-5">
+          <p className="font-bold mb-3">Guide utilisateur (Aide/Support)</p>
+          <div className="flex items-center gap-4">
+            {data?.guidePdfUrl && (
+              <a href={fileUrl(data.guidePdfUrl)} target="_blank" rel="noreferrer" className="text-sm text-bordeaux-600 dark:text-gold underline">
+                Guide actuel
+              </a>
+            )}
+            <div className="flex items-center gap-2">
+              <input type="file" accept="application/pdf" onChange={(e) => setGuideFile(e.target.files?.[0] || null)} className="text-sm" />
+              <button type="button" className="btn-secondary" disabled={!guideFile || uploadGuide.isPending} onClick={() => uploadGuide.mutate(guideFile)}>
+                <Upload size={15} /> Envoyer
+              </button>
+            </div>
           </div>
         </div>
 

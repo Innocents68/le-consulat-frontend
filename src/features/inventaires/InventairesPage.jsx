@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Eye } from 'lucide-react';
+import { Plus, Eye, Trash2 } from 'lucide-react';
 import api, { apiErrorMessage } from '../../lib/api';
 import DataTable from '../../components/ui/DataTable';
 import Modal from '../../components/ui/Modal';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import PageHeader from '../../components/ui/PageHeader';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { Field, Select } from '../../components/ui/Field';
@@ -33,6 +34,7 @@ export default function InventairesPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(EMPTY);
+  const [aSupprimer, setASupprimer] = useState(null);
 
   const create = useMutation({
     mutationFn: (payload) => api.post('/inventaires', payload).then((r) => r.data),
@@ -42,6 +44,16 @@ export default function InventairesPage() {
       setModalOpen(false);
       setForm(EMPTY);
       navigate(`/inventaires/${created.id}`);
+    },
+    onError: (e) => toast.error(apiErrorMessage(e)),
+  });
+
+  const supprimer = useMutation({
+    mutationFn: (id) => api.delete(`/inventaires/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inventaires'] });
+      toast.success('Inventaire supprimé.');
+      setASupprimer(null);
     },
     onError: (e) => toast.error(apiErrorMessage(e)),
   });
@@ -94,7 +106,12 @@ export default function InventairesPage() {
           <input type="date" className="input w-auto" value={table.filters.dateFin} onChange={(e) => table.setFilters({ dateFin: e.target.value })} />
         </>}
         rowActions={(row) => (
-          <button className="btn-ghost p-1.5" title="Détails" onClick={() => navigate(`/inventaires/${row.id}`)}><Eye size={15} /></button>
+          <>
+            <button className="btn-ghost p-1.5" title="Détails" onClick={() => navigate(`/inventaires/${row.id}`)}><Eye size={15} /></button>
+            {(row.statut === 'BROUILLON' || row.statut === 'EN_COMPTAGE') && (
+              <button className="btn-ghost p-1.5 text-danger" title="Supprimer" onClick={() => setASupprimer(row)}><Trash2 size={15} /></button>
+            )}
+          </>
         )}
         emptyLabel="Aucun inventaire."
       />
@@ -131,6 +148,17 @@ export default function InventairesPage() {
           </Field>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={!!aSupprimer}
+        onClose={() => setASupprimer(null)}
+        onConfirm={() => supprimer.mutate(aSupprimer.id)}
+        title="Supprimer l'inventaire"
+        message={`Supprimer définitivement l'inventaire ${aSupprimer?.numero} ? Cette action est irréversible.`}
+        confirmLabel="Supprimer"
+        danger
+        loading={supprimer.isPending}
+      />
     </div>
   );
 }

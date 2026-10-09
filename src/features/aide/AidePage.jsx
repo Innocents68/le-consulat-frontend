@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { LifeBuoy, Mail, Phone } from 'lucide-react';
-import api from '../../lib/api';
+import { LifeBuoy, Mail, Phone, FileText } from 'lucide-react';
+import api, { fileUrl } from '../../lib/api';
 import PageHeader from '../../components/ui/PageHeader';
 
 const APP_VERSION = '1.0.0';
@@ -36,6 +36,15 @@ export default function AidePage() {
             ))}
           </div>
         </div>
+
+        {contact?.guidePdfUrl && (
+          <div className="card p-5">
+            <p className="font-bold mb-3 flex items-center gap-2"><FileText size={16} /> Guide utilisateur</p>
+            <a href={fileUrl(contact.guidePdfUrl)} target="_blank" rel="noreferrer" className="btn-secondary inline-flex">
+              <FileText size={15} /> Ouvrir le guide (PDF)
+            </a>
+          </div>
+        )}
 
         <div className="card p-5">
           <p className="font-bold mb-3 flex items-center gap-2"><LifeBuoy size={16} /> Support</p>

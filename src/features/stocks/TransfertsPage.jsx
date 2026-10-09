@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, Send, Inbox, History, Check, X, Zap } from 'lucide-react';
+import { Send, Inbox, History, Check, X } from 'lucide-react';
 import api, { apiErrorMessage, fetchPage } from '../../lib/api';
 import DataTable from '../../components/ui/DataTable';
 import Modal from '../../components/ui/Modal';
@@ -14,13 +14,12 @@ import { useAuthStore } from '../../store/authStore';
 import { isSuperAdmin } from '../../lib/perimetre';
 
 const EMPTY_DEMANDE = { etablissementSourceId: '', produitSourceId: '', etablissementDestinationId: '', quantite: '', commentaire: '' };
-const EMPTY_DIRECT = { etablissementSourceId: '', produitSourceId: '', etablissementDestinationId: '', produitDestinationId: '', quantite: '' };
 
 /** Demandes_amelioration_logiciel_Le_Consulat_Professionnel.docx §5 : un transfert entre
- * établissements passe désormais par une demande, transmise au responsable de l'établissement
- * destinataire, qui l'accepte (en choisissant le produit correspondant dans son propre catalogue,
- * RG-002) ou la refuse (motif facultatif). Le transfert immédiat (RG-084) reste disponible pour le
- * Super Administrateur dans l'onglet dédié, pour un usage exceptionnel/administratif. */
+ * établissements passe par une demande, transmise au responsable de l'établissement destinataire,
+ * qui l'accepte (en choisissant le produit correspondant dans son propre catalogue, RG-002) ou la
+ * refuse (motif facultatif). Cahier_de_corrections_Le_Consulat.docx §1.1 : le transfert immédiat
+ * (ex RG-084) a été retiré — c'est désormais l'unique chemin, même pour le Super Administrateur. */
 export default function TransfertsPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -38,13 +37,11 @@ export default function TransfertsPage() {
         <TabButton active={tab === 'DEMANDER'} onClick={() => setTab('DEMANDER')} icon={Send} label="Nouvelle demande" />
         <TabButton active={tab === 'RECUES'} onClick={() => setTab('RECUES')} icon={Inbox} label="Demandes reçues" />
         <TabButton active={tab === 'EMISES'} onClick={() => setTab('EMISES')} icon={History} label="Demandes émises" />
-        {superAdmin && <TabButton active={tab === 'DIRECT'} onClick={() => setTab('DIRECT')} icon={Zap} label="Transfert immédiat" />}
       </div>
 
       {tab === 'DEMANDER' && <NouvelleDemande superAdmin={superAdmin} user={user} etablissements={etablissements} toast={toast} queryClient={queryClient} onDone={() => setTab('EMISES')} />}
       {tab === 'RECUES' && <DemandesRecues superAdmin={superAdmin} user={user} etablissements={etablissements} toast={toast} queryClient={queryClient} />}
       {tab === 'EMISES' && <DemandesEmises superAdmin={superAdmin} user={user} etablissements={etablissements} />}
-      {tab === 'DIRECT' && superAdmin && <TransfertDirect etablissements={etablissements} toast={toast} queryClient={queryClient} />}
     </div>
   );
 }
@@ -197,7 +194,7 @@ function DemandesRecues({ superAdmin, user, etablissements, toast, queryClient }
           { key: 'produitSourceNom', header: 'Produit' },
           { key: 'quantite', header: 'Quantité' },
           { key: 'demandeurNom', header: 'Demandeur' },
-          { key: 'statut', header: 'Statut', render: (r) => <StatusBadge status={r.statut} color={r.statut === 'EN_ATTENTE' ? 'orange' : r.statut === 'ACCEPTEE' ? 'green' : 'red'} label={r.statut === 'EN_ATTENTE' ? 'En attente' : r.statut === 'ACCEPTEE' ? 'Acceptée' : 'Refusée'} /> },
+          { key: 'statut', header: 'Statut', render: (r) => <StatusBadge status={r.statut} color={r.statut === 'EN_ATTENTE' ? 'orange' : r.statut === 'ACCEPTEE' ? 'green' : 'red'} label={r.statut === 'EN_ATTENTE' ? 'En attente' : r.statut === 'ACCEPTEE' ? 'Transférée' : 'Refusée'} /> },
         ]}
         rows={data?.rows || []}
         total={data?.total || 0}
@@ -282,7 +279,7 @@ function DemandesEmises({ superAdmin, user, etablissements }) {
           {
             key: 'statut', header: 'Statut', render: (r) => (
               <div>
-                <StatusBadge status={r.statut} color={r.statut === 'EN_ATTENTE' ? 'orange' : r.statut === 'ACCEPTEE' ? 'green' : 'red'} label={r.statut === 'EN_ATTENTE' ? 'En attente' : r.statut === 'ACCEPTEE' ? 'Acceptée' : 'Refusée'} />
+                <StatusBadge status={r.statut} color={r.statut === 'EN_ATTENTE' ? 'orange' : r.statut === 'ACCEPTEE' ? 'green' : 'red'} label={r.statut === 'EN_ATTENTE' ? 'En attente' : r.statut === 'ACCEPTEE' ? 'Transférée' : 'Refusée'} />
                 {r.statut === 'REFUSEE' && r.motifRefus && <p className="text-xs text-ink-light mt-1">Motif : {r.motifRefus}</p>}
               </div>
             ),
@@ -298,95 +295,6 @@ function DemandesEmises({ superAdmin, user, etablissements }) {
         onRetry={refetch}
         emptyLabel={!etablissementId && superAdmin ? 'Choisissez un établissement.' : 'Aucune demande émise.'}
       />
-    </div>
-  );
-}
-
-function TransfertDirect({ etablissements, toast, queryClient }) {
-  const [form, setForm] = useState(EMPTY_DIRECT);
-
-  const { data: produitsSource } = useQuery({
-    queryKey: ['produits-suivis', form.etablissementSourceId],
-    queryFn: async () => {
-      const { data } = await api.get('/produits', { params: { etablissementId: form.etablissementSourceId, size: 200 } });
-      return (data.content || []).filter((p) => p.suiviStock);
-    },
-    enabled: !!form.etablissementSourceId,
-  });
-  const { data: produitsDestination } = useQuery({
-    queryKey: ['produits-suivis', form.etablissementDestinationId],
-    queryFn: async () => {
-      const { data } = await api.get('/produits', { params: { etablissementId: form.etablissementDestinationId, size: 200 } });
-      return (data.content || []).filter((p) => p.suiviStock);
-    },
-    enabled: !!form.etablissementDestinationId,
-  });
-
-  const transfert = useMutation({
-    mutationFn: (payload) => api.post('/mouvements-stock/transferts', payload).then((r) => r.data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['mouvements-stock'] });
-      queryClient.invalidateQueries({ queryKey: ['produits'] });
-      toast.success('Transfert enregistré.');
-      setForm(EMPTY_DIRECT);
-    },
-    onError: (e) => toast.error(apiErrorMessage(e)),
-  });
-
-  function handleSubmit(e) {
-    e.preventDefault();
-    if (form.etablissementSourceId === form.etablissementDestinationId) {
-      toast.error('Un transfert doit se faire entre deux établissements différents.');
-      return;
-    }
-    transfert.mutate({
-      produitSourceId: Number(form.produitSourceId),
-      produitDestinationId: Number(form.produitDestinationId),
-      quantite: Number(form.quantite),
-    });
-  }
-
-  return (
-    <div className="card p-5 max-w-2xl">
-      <p className="text-sm text-warning mb-4">Contourne le workflow de demande/acceptation — le transfert a lieu immédiatement, sans validation du responsable destinataire (RG-084).</p>
-      <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-2 gap-4 items-start">
-          <div>
-            <p className="text-xs font-semibold uppercase text-ink-light mb-2">Depuis</p>
-            <Field label="Établissement source" required>
-              <Select value={form.etablissementSourceId} onChange={(e) => setForm((f) => ({ ...f, etablissementSourceId: e.target.value, produitSourceId: '' }))}>
-                <option value="" disabled>Choisir</option>
-                {(etablissements || []).map((et) => <option key={et.id} value={et.id}>{et.nom}</option>)}
-              </Select>
-            </Field>
-            <Field label="Produit source" required>
-              <Select value={form.produitSourceId} onChange={(e) => setForm((f) => ({ ...f, produitSourceId: e.target.value }))} disabled={!form.etablissementSourceId}>
-                <option value="" disabled>Choisir un produit</option>
-                {(produitsSource || []).map((p) => <option key={p.id} value={p.id}>{p.nom} (stock : {p.quantiteStock})</option>)}
-              </Select>
-            </Field>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase text-ink-light mb-2 flex items-center gap-1"><ArrowRight size={13} /> Vers</p>
-            <Field label="Établissement destination" required>
-              <Select value={form.etablissementDestinationId} onChange={(e) => setForm((f) => ({ ...f, etablissementDestinationId: e.target.value, produitDestinationId: '' }))}>
-                <option value="" disabled>Choisir</option>
-                {(etablissements || []).map((et) => <option key={et.id} value={et.id}>{et.nom}</option>)}
-              </Select>
-            </Field>
-            <Field label="Produit destination" required>
-              <Select value={form.produitDestinationId} onChange={(e) => setForm((f) => ({ ...f, produitDestinationId: e.target.value }))} disabled={!form.etablissementDestinationId}>
-                <option value="" disabled>Choisir un produit</option>
-                {(produitsDestination || []).map((p) => <option key={p.id} value={p.id}>{p.nom} (stock : {p.quantiteStock})</option>)}
-              </Select>
-            </Field>
-          </div>
-        </div>
-        <Field label="Quantité" required>
-          <input type="number" min="0.001" step="0.001" className="input" value={form.quantite} onChange={(e) => setForm((f) => ({ ...f, quantite: e.target.value }))} required />
-        </Field>
-        <button className="btn-primary mt-2" type="submit" disabled={transfert.isPending}>Effectuer le transfert</button>
-      </form>
     </div>
   );
 }
