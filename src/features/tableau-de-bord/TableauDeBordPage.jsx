@@ -1,9 +1,10 @@
+import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   ShoppingCart, Boxes, Wallet, Users, ArrowRight, ArrowUpRight, ArrowDownRight,
   UtensilsCrossed, Wine, ChefHat, PackageSearch, TrendingUp, Settings, LifeBuoy, DatabaseBackup, Lightbulb,
-  TriangleAlert,
+  TriangleAlert, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import api, { apiErrorMessage } from '../../lib/api';
 import { Loader, ErrorState } from '../../components/ui/Feedback';
@@ -64,6 +65,11 @@ export default function TableauDeBordPage() {
     queryKey: ['produits-alertes-stock'],
     queryFn: async () => (await api.get('/produits/alertes-stock')).data,
   });
+  const ALERTES_PAR_PAGE = 12;
+  const [pageAlertes, setPageAlertes] = useState(0);
+  const totalPagesAlertes = Math.max(Math.ceil((produitsAlerte?.length || 0) / ALERTES_PAR_PAGE), 1);
+  const pageAlertesActuelle = Math.min(pageAlertes, totalPagesAlertes - 1);
+  const produitsAlertePage = (produitsAlerte || []).slice(pageAlertesActuelle * ALERTES_PAR_PAGE, (pageAlertesActuelle + 1) * ALERTES_PAR_PAGE);
 
   const sauvegarder = useMutation({
     mutationFn: () => api.post('/sauvegardes').then((r) => r.data),
@@ -127,7 +133,7 @@ export default function TableauDeBordPage() {
             <p className="font-bold text-danger">Stock faible — {produitsAlerte.length} produit{produitsAlerte.length > 1 ? 's' : ''} sous le seuil d'alerte</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {produitsAlerte.map((p) => (
+            {produitsAlertePage.map((p) => (
               <button
                 key={p.id}
                 onClick={() => navigate(`/mouvements-stock?etablissementId=${p.etablissementId}`)}
@@ -141,6 +147,27 @@ export default function TableauDeBordPage() {
               </button>
             ))}
           </div>
+          {totalPagesAlertes > 1 && (
+            <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-danger/15 text-xs text-ink-light">
+              <span>Page {pageAlertesActuelle + 1} / {totalPagesAlertes}</span>
+              <div className="flex items-center gap-1">
+                <button
+                  className="btn-ghost px-2 py-1"
+                  disabled={pageAlertesActuelle <= 0}
+                  onClick={() => setPageAlertes(pageAlertesActuelle - 1)}
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  className="btn-ghost px-2 py-1"
+                  disabled={pageAlertesActuelle + 1 >= totalPagesAlertes}
+                  onClick={() => setPageAlertes(pageAlertesActuelle + 1)}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
